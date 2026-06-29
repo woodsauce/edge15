@@ -9,6 +9,13 @@ export type Candle = {
   volume: number;
 };
 
+export type FeedDiagnostic = {
+  status: FeedHealth;
+  latencyMs: number | null;
+  message: string;
+  updatedAt: string | null;
+};
+
 export type KalshiMarketContext = {
   ticker: string | null;
   title: string | null;
@@ -28,6 +35,11 @@ export type MarketSnapshot = {
     coinbase: FeedHealth;
     kalshi: FeedHealth;
     fallback: FeedHealth;
+  };
+  diagnostics: {
+    coinbase: FeedDiagnostic;
+    fallback: FeedDiagnostic;
+    kalshi: FeedDiagnostic;
   };
   fetchedAt: string | null;
 };

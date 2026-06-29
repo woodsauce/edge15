@@ -5,6 +5,6 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const snapshot = await getMarketSnapshot();
-  const hasAnyPrice = snapshot.btcPrice !== null;
-  return NextResponse.json(snapshot, { status: hasAnyPrice ? 200 : 503 });
+  const priceFeedOk = snapshot.btcPrice !== null && snapshot.candles.length >= 10;
+  return NextResponse.json(snapshot, { status: priceFeedOk ? 200 : 503 });
 }

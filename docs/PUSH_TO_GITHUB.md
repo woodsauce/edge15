@@ -1,14 +1,13 @@
-# Push Genesis-001 to GitHub
+# Push Genesis-002 to GitHub
 
-From inside this folder:
+Upload the contents of this folder to the existing `woodsauce/edge15` repository.
+
+Recommended commit message:
 
 ```bash
-git init
-git branch -M main
 git add .
-git commit -m "Genesis-001: initialize Edge15 architecture"
-git remote add origin https://github.com/woodsauce/edge15.git
-git push -u origin main
+git commit -m "Genesis-002: add live data engine and feed diagnostics"
+git push
 ```
 
-Then connect the GitHub repo to Vercel.
+If using the GitHub website, drag the files and folders from inside this project folder into the repository root, then commit with the message above.

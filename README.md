@@ -1,23 +1,17 @@
-# Edge15 Genesis-001
+# Edge15 Genesis-002
 
 Edge15 is an AI decision-support platform for 15-minute BTC prediction markets.
 
-Genesis-001 is the foundation release. It intentionally focuses on the core project structure and live data shell before adding the full AI Trading Desk.
+Genesis-002 focuses on the live data foundation:
 
-## What is included
-
-- Next.js + TypeScript app structure
-- Tailwind mobile-first UI
-- Vercel-ready API routes
-- Coinbase market data service
-- Binance.US fallback service
-- Kalshi BTC 15m market context service
+- Next.js + TypeScript + Tailwind
+- Coinbase Exchange primary BTC feed
+- Binance.US fallback BTC feed
+- Kalshi KXBTC15M optional market context
+- Feed-specific diagnostics
 - Health endpoint
-- Countdown engine
-- Indicator scaffolding: EMA, RSI, VWAP, ATR
-- Starter decision engine
-- Edge15 Constitution
-- Vitest test setup
+- Market data endpoint
+- Mobile-first live dashboard
 
 ## Run locally
 
@@ -26,31 +20,26 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open:
 
-## Test
-
-```bash
-npm run typecheck
-npm test
-npm run build
+```text
+http://localhost:3000
 ```
 
-## API routes
+Test endpoints:
 
-- `/api/health`
-- `/api/market-data`
-- `/api/coinbase`
-- `/api/kalshi`
+```text
+/api/health
+/api/market-data
+/api/coinbase
+/api/fallback
+/api/kalshi
+```
 
-## Deploy to Vercel
+## Deploy
 
-Connect the GitHub repository to Vercel and deploy normally. No environment variables are required for Genesis-001.
+Push the full project contents to `https://github.com/woodsauce/edge15`, then Vercel will redeploy from GitHub.
 
-## Next milestone: Genesis-002
+## Release notes
 
-- Better data diagnostics
-- Full health dashboard
-- Manual strike override
-- Flight recorder shell
-- Better decision scoring tests
+See `docs/GENESIS_002.md`.
