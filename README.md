@@ -1,20 +1,38 @@
-# Edge15 Genesis-002.2
+# Edge15 Genesis-003
 
-Kalshi parser patch for the Genesis live-data engine.
+Countdown + indicator engine for the Genesis live-data foundation.
 
 Upload the contents of this folder into the root of `woodsauce/edge15` and commit:
 
 ```text
-Genesis-002.2: improve Kalshi strike and odds parsing
+Genesis-003: add countdown and indicator engine
 ```
 
-Then redeploy on Vercel and test:
+Then let Vercel redeploy and test:
 
+- `/`
+- `/api/health`
 - `/api/market-data`
-- `/api/kalshi`
-- Dashboard API Test button
 
+## Added
 
-## Genesis-002.2 patch
+- Bigger 15-minute countdown remains at top.
+- Indicator engine output on dashboard:
+  - RSI 14
+  - EMA 9/21 bias
+  - VWAP relationship
+  - Momentum 5m
+  - ATR 14
+  - Volatility percent
+- Decision engine now outputs:
+  - Entry Score
+  - Opportunity
+  - Trade Grade
+  - Confidence
+  - Stability
+  - Why Not panel
+  - Better Market Story
 
-Adds derived reference target support for Kalshi up/down 15-minute BTC markets when Kalshi does not expose a traditional strike.
+## Not included yet
+
+This is still Genesis core. Position manager, full AI Debate, historical pattern matching, and hide/show sections come later.

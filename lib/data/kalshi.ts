@@ -4,7 +4,7 @@ const KALSHI_BASE_URL = 'https://external-api.kalshi.com/trade-api/v2';
 const KALSHI_MARKETS_URL = `${KALSHI_BASE_URL}/markets`;
 const TIMEOUT_MS = 6500;
 
-type RawMarket = Record<string, any>;
+type RawMarket = Record<string, unknown>;
 
 type OrderbookSide = Array<[number, number]> | Array<{ price?: number; quantity?: number; count?: number }>;
 
@@ -59,15 +59,15 @@ function chooseBestMarket(markets: RawMarket[]) {
 
   const now = Date.now();
   const openMarkets = markets.filter((market) => {
-    const close = Date.parse(market.close_time ?? market.expiration_time ?? '');
+    const close = Date.parse(stringOrNull(market.close_time ?? market.expiration_time) ?? '');
     return !Number.isFinite(close) || close > now - 60_000;
   });
 
   return (openMarkets.length ? openMarkets : markets)
     .slice()
     .sort((a, b) => {
-      const aTime = Date.parse(a.close_time ?? a.expiration_time ?? '') || Number.MAX_SAFE_INTEGER;
-      const bTime = Date.parse(b.close_time ?? b.expiration_time ?? '') || Number.MAX_SAFE_INTEGER;
+      const aTime = Date.parse(stringOrNull(a.close_time ?? a.expiration_time) ?? '') || Number.MAX_SAFE_INTEGER;
+      const bTime = Date.parse(stringOrNull(b.close_time ?? b.expiration_time) ?? '') || Number.MAX_SAFE_INTEGER;
       return aTime - bTime;
     })[0];
 }
