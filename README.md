@@ -1,45 +1,15 @@
-# Edge15 Genesis-002
+# Edge15 Genesis-002.1
 
-Edge15 is an AI decision-support platform for 15-minute BTC prediction markets.
+Kalshi parser patch for the Genesis live-data engine.
 
-Genesis-002 focuses on the live data foundation:
-
-- Next.js + TypeScript + Tailwind
-- Coinbase Exchange primary BTC feed
-- Binance.US fallback BTC feed
-- Kalshi KXBTC15M optional market context
-- Feed-specific diagnostics
-- Health endpoint
-- Market data endpoint
-- Mobile-first live dashboard
-
-## Run locally
-
-```bash
-npm install
-npm run dev
-```
-
-Open:
+Upload the contents of this folder into the root of `woodsauce/edge15` and commit:
 
 ```text
-http://localhost:3000
+Genesis-002.1: improve Kalshi strike and odds parsing
 ```
 
-Test endpoints:
+Then redeploy on Vercel and test:
 
-```text
-/api/health
-/api/market-data
-/api/coinbase
-/api/fallback
-/api/kalshi
-```
-
-## Deploy
-
-Push the full project contents to `https://github.com/woodsauce/edge15`, then Vercel will redeploy from GitHub.
-
-## Release notes
-
-See `docs/GENESIS_002.md`.
+- `/api/market-data`
+- `/api/kalshi`
+- Dashboard API Test button

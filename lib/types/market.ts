@@ -22,7 +22,11 @@ export type KalshiMarketContext = {
   strike: number | null;
   yesBid: number | null;
   yesAsk: number | null;
+  noBid?: number | null;
+  noAsk?: number | null;
   closeTime: string | null;
+  strikeSource?: string | null;
+  oddsSource?: string | null;
 };
 
 export type MarketSnapshot = {

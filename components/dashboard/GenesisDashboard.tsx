@@ -127,7 +127,7 @@ export function GenesisDashboard() {
         <Panel title="Market">
           <div className="grid grid-cols-2 gap-3">
             <Metric label="BTC" value={price} detail={snapshot.source} tone="blue" />
-            <Metric label="Strike" value={strike} detail={snapshot.kalshi?.ticker ?? 'Kalshi optional'} />
+            <Metric label="Strike" value={strike} detail={snapshot.kalshi?.strikeSource ? `Source: ${snapshot.kalshi.strikeSource}` : snapshot.kalshi?.ticker ?? 'Kalshi optional'} />
             <Metric label="Distance" value={distance === null ? '—' : `${distance >= 0 ? '+' : ''}$${distance.toFixed(0)}`} detail={distance === null ? 'Waiting for strike' : distance >= 0 ? 'Above strike' : 'Below strike'} tone={distance === null ? 'neutral' : distance >= 0 ? 'good' : 'bad'} />
             <Metric label="Candles" value={`${snapshot.candles.length}`} detail="1m candles available" tone={snapshot.candles.length >= 10 ? 'good' : 'warn'} />
           </div>
@@ -138,6 +138,14 @@ export function GenesisDashboard() {
             <HealthRow label="Coinbase" diagnostic={snapshot.diagnostics.coinbase} />
             <HealthRow label="Fallback" diagnostic={snapshot.diagnostics.fallback} />
             <HealthRow label="Kalshi" diagnostic={snapshot.diagnostics.kalshi} />
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+              <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Kalshi odds</div>
+              <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                <div><span className="text-slate-500">YES bid</span><div className="font-semibold">{snapshot.kalshi?.yesBid ?? '—'}¢</div></div>
+                <div><span className="text-slate-500">YES ask</span><div className="font-semibold">{snapshot.kalshi?.yesAsk ?? '—'}¢</div></div>
+              </div>
+              <div className="mt-2 text-xs text-slate-500">Source: {snapshot.kalshi?.oddsSource ?? 'not detected'}</div>
+            </div>
             {error ? <div className="rounded-xl border border-edge-amber/40 bg-edge-amber/10 p-3 text-edge-amber">{error}</div> : null}
             <div className="text-xs text-edge-muted">Last update: {snapshot.fetchedAt ? new Date(snapshot.fetchedAt).toLocaleTimeString() : 'not yet'}</div>
             <button onClick={runApiTest} disabled={testing} className="w-full rounded-xl border border-edge-blue/40 bg-edge-blue/10 px-3 py-2 text-sm font-bold text-edge-blue disabled:opacity-60">
