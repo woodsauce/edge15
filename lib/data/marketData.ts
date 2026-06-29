@@ -40,7 +40,19 @@ export async function getMarketSnapshot(): Promise<MarketSnapshot> {
 
   const kalshiResult = await timed('Kalshi', fetchKalshiBtc15m);
   diagnostics.kalshi = kalshiResult.diagnostic;
-  const kalshi = kalshiResult.ok ? kalshiResult.value : null;
+  let kalshi = kalshiResult.ok ? kalshiResult.value : null;
+  if (kalshi && kalshi.strike === null) {
+    const derivedStrike = deriveReferenceStrikeFromCandles(kalshi.closeTime, candles);
+    if (derivedStrike !== null) {
+      kalshi = {
+        ...kalshi,
+        strike: derivedStrike,
+        strikeSource: 'derived window open from 1m candles',
+        derivedStrike: true,
+      };
+    }
+  }
+
   if (kalshiResult.ok && !kalshi) {
     diagnostics.kalshi = {
       ...diagnostics.kalshi,
@@ -74,6 +86,30 @@ export async function getHealthReport() {
     health: snapshot.health,
     diagnostics: snapshot.diagnostics,
   };
+}
+
+
+function deriveReferenceStrikeFromCandles(closeTime: string | null, candles: MarketSnapshot['candles']): number | null {
+  if (!closeTime || candles.length === 0) return null;
+
+  const closeMs = Date.parse(closeTime);
+  if (!Number.isFinite(closeMs)) return null;
+
+  // KXBTC15M markets are 15-minute windows. If Kalshi does not expose a
+  // traditional strike for an "up in next 15 mins" market, use the candle
+  // closest to the contract open as the working reference target. This is a
+  // derived trading reference, not an official settlement value.
+  const openMs = closeMs - 15 * 60 * 1000;
+  const sorted = candles.slice().sort((a, b) => Math.abs(a.time - openMs) - Math.abs(b.time - openMs));
+  const nearest = sorted[0];
+  if (!nearest) return null;
+
+  // Only accept a nearby 1-minute candle so stale candle history cannot create
+  // a misleading target. Use the candle open because this market asks whether
+  // BTC is up from the start of the 15-minute window.
+  const maxDistanceMs = 2 * 60 * 1000;
+  if (Math.abs(nearest.time - openMs) > maxDistanceMs) return null;
+  return Number.isFinite(nearest.open) ? nearest.open : null;
 }
 
 function blankDiagnostic(status: FeedHealth, message: string): FeedDiagnostic {

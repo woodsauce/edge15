@@ -26,6 +26,7 @@ export type KalshiMarketContext = {
   noAsk?: number | null;
   closeTime: string | null;
   strikeSource?: string | null;
+  derivedStrike?: boolean;
   oddsSource?: string | null;
 };
 

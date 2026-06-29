@@ -94,7 +94,7 @@ export function GenesisDashboard() {
   const priceFeedLive = snapshot.btcPrice !== null && snapshot.candles.length >= 10;
 
   const price = snapshot.btcPrice ? `$${snapshot.btcPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : 'Loading';
-  const strike = snapshot.strike ? `$${snapshot.strike.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'Manual/Detect';
+  const strike = snapshot.strike ? `$${snapshot.strike.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'Detecting';
   const distance = snapshot.btcPrice && snapshot.strike ? snapshot.btcPrice - snapshot.strike : null;
 
   return (
@@ -127,8 +127,8 @@ export function GenesisDashboard() {
         <Panel title="Market">
           <div className="grid grid-cols-2 gap-3">
             <Metric label="BTC" value={price} detail={snapshot.source} tone="blue" />
-            <Metric label="Strike" value={strike} detail={snapshot.kalshi?.strikeSource ? `Source: ${snapshot.kalshi.strikeSource}` : snapshot.kalshi?.ticker ?? 'Kalshi optional'} />
-            <Metric label="Distance" value={distance === null ? '—' : `${distance >= 0 ? '+' : ''}$${distance.toFixed(0)}`} detail={distance === null ? 'Waiting for strike' : distance >= 0 ? 'Above strike' : 'Below strike'} tone={distance === null ? 'neutral' : distance >= 0 ? 'good' : 'bad'} />
+            <Metric label="Reference" value={strike} detail={snapshot.kalshi?.derivedStrike ? 'Derived from 15m window open candle' : snapshot.kalshi?.strikeSource ? `Source: ${snapshot.kalshi.strikeSource}` : snapshot.kalshi?.ticker ?? 'Kalshi optional'} />
+            <Metric label="Distance" value={distance === null ? '—' : `${distance >= 0 ? '+' : ''}$${distance.toFixed(0)}`} detail={distance === null ? 'Waiting for reference' : distance >= 0 ? 'Above strike' : 'Below strike'} tone={distance === null ? 'neutral' : distance >= 0 ? 'good' : 'bad'} />
             <Metric label="Candles" value={`${snapshot.candles.length}`} detail="1m candles available" tone={snapshot.candles.length >= 10 ? 'good' : 'warn'} />
           </div>
         </Panel>
@@ -165,6 +165,7 @@ export function GenesisDashboard() {
           <li>Coinbase is the primary live BTC data feed.</li>
           <li>Binance.US is the fallback price/candle feed if Coinbase fails.</li>
           <li>Kalshi market context is optional and no longer allowed to break the dashboard.</li>
+          <li>If Kalshi does not expose a strike, Edge15 derives a working reference from the 15-minute window open candle.</li>
           <li>Diagnostics show feed-specific errors instead of a generic data failure.</li>
         </ul>
       </Panel>
