@@ -43,7 +43,7 @@ const SECTION_STORAGE_KEY = 'edge15.visibleSections.v1';
 const ENGINE_AVERAGE_STORAGE_KEY = 'edge15.engineAverages.v1';
 const ACTIVE_JOURNAL_ID_STORAGE_KEY = 'edge15.activeJournalEntryId.v1';
 const QUALITY_FILTER_STORAGE_KEY = 'edge15.tradeQualityFilter.v1';
-const COMMITMENT_ACCURACY_STORAGE_KEY = 'edge15.commitmentAccuracy.v1';
+const COMMITMENT_ACCURACY_STORAGE_KEY = 'edge15.commitmentAccuracy.v2.performance';
 const DEFAULT_VISIBLE_SECTIONS = {
   aiDesk: true,
   marketStory: true,
@@ -78,6 +78,17 @@ type CommitmentAccuracyRecord = {
   close: number | null;
   entryScore: number | null;
   confidence: number | null;
+  source: 'auto_observed' | 'auto_recovered';
+};
+
+type PerformanceWindow = {
+  label: string;
+  hours: number | null;
+  wins: number;
+  losses: number;
+  noTrades: number;
+  resolved: number;
+  winRate: number | null;
 };
 
 export function GenesisDashboard() {
@@ -101,7 +112,7 @@ export function GenesisDashboard() {
     if (savedAccuracy) {
       try {
         const parsed = JSON.parse(savedAccuracy) as CommitmentAccuracyRecord[];
-        if (Array.isArray(parsed)) setCommitmentAccuracy(parsed.slice(0, 10));
+        if (Array.isArray(parsed)) setCommitmentAccuracy(parsed.slice(0, 500));
       } catch {
         window.localStorage.removeItem(COMMITMENT_ACCURACY_STORAGE_KEY);
       }
@@ -282,8 +293,15 @@ export function GenesisDashboard() {
     const record = resolveCommitmentOutcome(plan, candles);
     if (!record) return;
     setCommitmentAccuracy((previous) => {
-      if (previous.some((item) => item.contractKey === record.contractKey)) return previous;
-      const next = [record, ...previous].slice(0, 10);
+      const existingIndex = previous.findIndex((item) => item.contractKey === record.contractKey);
+      let next: CommitmentAccuracyRecord[];
+      if (existingIndex >= 0) {
+        const existing = previous[existingIndex];
+        if (existing.correct !== null || record.correct === null) return previous;
+        next = previous.map((item, index) => index === existingIndex ? record : item);
+      } else {
+        next = [record, ...previous].slice(0, 500);
+      }
       window.localStorage.setItem(COMMITMENT_ACCURACY_STORAGE_KEY, JSON.stringify(next));
       return next;
     });
@@ -349,7 +367,7 @@ export function GenesisDashboard() {
   }
 
   const activeSignal = signalPlan;
-  const entryGates = useMemo(() => buildEntryGates(decision, activeSignal, countdown, qualityFilter), [decision, activeSignal, countdown, qualityFilter]);
+  const entryGates = useMemo(() => buildEntryGates(decision, activeSignal, countdown, qualityFilter, snapshot), [decision, activeSignal, countdown, qualityFilter, snapshot]);
   const lateWarning = useMemo(() => buildLateEntryWarning(decision, countdown), [decision, countdown]);
   const contradiction = useMemo(() => buildContradictionAlert(decision, activeSignal, countdown), [decision, activeSignal, countdown]);
   const doNotChase = useMemo(() => buildDoNotChaseWarning(decision, activeSignal, countdown), [decision, activeSignal, countdown]);
@@ -362,7 +380,7 @@ export function GenesisDashboard() {
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-014</div>
+          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-015</div>
           <h1 className="text-3xl font-black tracking-tight">Edge15</h1>
         </div>
         <div className={`rounded-full border px-3 py-2 text-xs ${priceFeedLive ? 'border-edge-green/40 bg-edge-green/10 text-edge-green' : 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber'}`}>
@@ -397,7 +415,7 @@ export function GenesisDashboard() {
             <Metric label="BTC" value={price} detail={snapshot.source} tone="blue" />
             <Metric label="Reference" value={strike} detail={snapshot.kalshi?.derivedStrike ? 'Derived 15m open' : snapshot.kalshi?.strikeSource ? `Source: ${snapshot.kalshi.strikeSource}` : snapshot.kalshi?.ticker ?? 'Kalshi optional'} />
             <Metric label="Distance" value={distance === null ? '—' : `${distance >= 0 ? '+' : ''}$${distance.toFixed(0)}`} detail={distance === null ? 'Waiting for reference' : distance >= 0 ? 'Above strike' : 'Below strike'} tone={distance === null ? 'neutral' : distance >= 0 ? 'good' : 'bad'} />
-            <Metric label="Settlement Risk" value={decision.settlement.risk} detail={decision.settlement.mode === 'settlement' ? 'Final 2m reality check' : 'Normal mode'} help={decision.settlement.message} tone={decision.settlement.risk === 'Low' ? 'good' : decision.settlement.risk === 'Medium' ? 'warn' : 'bad'} />
+            <Metric label="Settlement Risk" value={decision.settlement.risk} detail={decision.settlement.mode === 'settlement' ? 'Final 6m reality check' : 'Normal mode'} help={decision.settlement.message} tone={decision.settlement.risk === 'Low' ? 'good' : decision.settlement.risk === 'Medium' ? 'warn' : 'bad'} />
             <Metric label="Contract Phase" value={contractPhaseLabel(countdown)} detail={contractPhaseDetail(countdown)} help="Edge15 changes emphasis through the 15-minute window: early structure, middle confirmation, then settlement reality near the end." tone={countdown.remainingMs <= 120000 ? 'warn' : 'blue'} />
           </div>
           <div className="mt-3 rounded-2xl border border-edge-line bg-black/20 p-3 text-xs leading-5 text-edge-muted">
@@ -406,7 +424,8 @@ export function GenesisDashboard() {
         </Panel>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+      <section className="grid gap-4 xl:grid-cols-3">
+        <PerformanceTrackerPanel records={commitmentAccuracy} />
         <CommitmentAccuracyPanel records={commitmentAccuracy} activeSignal={activeSignal} />
         <MicrostructurePanel orderBook={snapshot.orderBook} />
       </section>
@@ -555,7 +574,7 @@ export function GenesisDashboard() {
       ) : null}
 
       {visibleSections.genesisStatus ? (
-        <Panel title="Genesis-014 status">
+        <Panel title="Genesis-015 status">
           <ul className="list-disc space-y-2 pl-5 text-sm text-edge-muted">
             <li>Commitment Accuracy Tracker grades Edge15's locked contract predictions for the last 10 completed windows.</li>
             <li>Market microstructure now uses Coinbase level-2 order book spread, depth, and imbalance as another professional-style data read.</li>
@@ -671,6 +690,66 @@ function RecentTrades({ entries, activeId, onSelect }: { entries: TradeJournalEn
 
 
 
+
+function PerformanceTrackerPanel({ records }: { records: CommitmentAccuracyRecord[] }) {
+  const windows = buildPerformanceWindows(records);
+  const allTime = windows[0];
+  const tone = allTime.winRate === null ? 'neutral' : allTime.winRate >= 75 ? 'good' : allTime.winRate >= 60 ? 'warn' : 'bad';
+  return (
+    <Panel title="Performance tracker">
+      <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+        <Metric label="All-time W/L" value={`${allTime.wins}-${allTime.losses}`} detail={allTime.winRate === null ? 'No resolved trades yet' : `${allTime.winRate}% win rate`} help="Automatic wins and losses from Edge15's committed OVER/UNDER plans. NO TRADE is tracked separately and does not count as a loss." tone={tone} />
+        <Metric label="No Trades" value={`${allTime.noTrades}`} detail="Skipped commitments" help="A NO TRADE is Edge15 protecting you from a low-quality setup. It is not counted as a win or loss." tone="blue" />
+        <Metric label="Resolved" value={`${allTime.resolved}`} detail="Scored commitments" help="Number of completed committed OVER/UNDER calls stored in this browser." tone="neutral" />
+      </div>
+      <div className="mt-4 grid gap-2">
+        {windows.slice(1).map((window) => (
+          <div key={window.label} className="grid grid-cols-[88px_1fr_70px] items-center gap-2 rounded-xl border border-edge-line bg-black/20 px-3 py-2 text-xs">
+            <div className="font-black text-slate-200">{window.label}</div>
+            <div className="text-edge-muted">W/L {window.wins}-{window.losses} • No trade {window.noTrades}</div>
+            <div className={`text-right font-black ${window.winRate === null ? 'text-edge-muted' : window.winRate >= 75 ? 'text-edge-green' : window.winRate >= 60 ? 'text-edge-amber' : 'text-edge-red'}`}>{window.winRate === null ? '—' : `${window.winRate}%`}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 rounded-2xl border border-edge-amber/30 bg-edge-amber/10 p-3 text-xs leading-5 text-edge-amber">
+        Automatic while Edge15 is open. If every device is closed, a future cloud watcher is needed to keep scoring windows in the background.
+      </div>
+    </Panel>
+  );
+}
+
+function buildPerformanceWindows(records: CommitmentAccuracyRecord[]): PerformanceWindow[] {
+  const windows: Array<{ label: string; hours: number | null }> = [
+    { label: 'All time', hours: null },
+    { label: '1 hour', hours: 1 },
+    { label: '4 hours', hours: 4 },
+    { label: '12 hours', hours: 12 },
+    { label: '24 hours', hours: 24 },
+  ];
+  const nowMs = Date.now();
+  return windows.map((window) => {
+    const filtered = records.filter((record) => {
+      if (window.hours === null) return true;
+      const resolvedMs = Date.parse(record.resolvedAt);
+      return Number.isFinite(resolvedMs) && nowMs - resolvedMs <= window.hours * 60 * 60 * 1000;
+    });
+    const scored = filtered.filter((record) => record.correct !== null);
+    const wins = scored.filter((record) => record.correct === true).length;
+    const losses = scored.filter((record) => record.correct === false).length;
+    const noTrades = filtered.filter((record) => record.committedDirection === 'NONE').length;
+    const resolved = wins + losses;
+    return {
+      label: window.label,
+      hours: window.hours,
+      wins,
+      losses,
+      noTrades,
+      resolved,
+      winRate: resolved ? Math.round((wins / resolved) * 100) : null,
+    };
+  });
+}
+
 function CommitmentAccuracyPanel({ records, activeSignal }: { records: CommitmentAccuracyRecord[]; activeSignal: SignalPlan | null }) {
   const resolved = records.filter((record) => record.correct !== null);
   const correct = resolved.filter((record) => record.correct).length;
@@ -735,6 +814,7 @@ function resolveCommitmentOutcome(plan: SignalPlan, candles: MarketSnapshot['can
       close: null,
       entryScore: null,
       confidence: null,
+      source: 'auto_observed',
     };
   }
   const first = windowCandles[0];
@@ -753,6 +833,7 @@ function resolveCommitmentOutcome(plan: SignalPlan, candles: MarketSnapshot['can
     close: last.close,
     entryScore: null,
     confidence: null,
+    source: 'auto_observed',
   };
 }
 
@@ -858,7 +939,7 @@ function EntryGateChecklist({
           {gates.filter((gate) => gate.passed).length}/{gates.length} passed
         </div>
       </div>
-      <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4">
         {gates.map((gate) => (
           <div key={gate.label} className="flex min-h-[92px] items-start gap-2 rounded-xl border border-edge-line bg-slate-950/70 p-3 text-sm">
             <span className={gate.passed ? 'text-edge-green' : gate.severity === 'block' ? 'text-edge-red' : 'text-edge-amber'}>{gate.passed ? '✅' : gate.severity === 'block' ? '⛔' : '⚠️'}</span>
@@ -924,7 +1005,34 @@ function AlertCard({ title, message, tone }: { title: string; message: string; t
   );
 }
 
-function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, countdown: Countdown, qualityFilter: QualityFilter): EntryGate[] {
+
+function buildValueGate(direction: SignalDirection, countdown: Countdown, snapshot: MarketSnapshot): EntryGate {
+  if (direction !== 'OVER' && direction !== 'UNDER') {
+    return { label: 'Payout value', passed: false, detail: 'No side selected yet, so Edge15 cannot judge payout value.', severity: 'warn' };
+  }
+  const askCents = direction === 'OVER' ? snapshot.kalshi?.yesAsk ?? null : snapshot.kalshi?.noAsk ?? null;
+  const late = countdown.remainingMs <= 240000;
+  if (askCents === null) {
+    return {
+      label: 'Payout value',
+      passed: !late,
+      detail: late ? 'Odds are unavailable and the window is late. Edge15 blocks fresh entries when payout value cannot be verified.' : 'Odds are unavailable. This gate will become stricter late in the window.',
+      severity: late ? 'block' : 'warn',
+    };
+  }
+  const cost = askCents / 100;
+  const grossProfit = Math.max(0, 1 - cost);
+  const tooExpensive = late && (askCents >= 90 || grossProfit <= 0.1);
+  const thin = askCents >= 86 || grossProfit <= 0.14;
+  return {
+    label: 'Payout value',
+    passed: !tooExpensive,
+    detail: `${direction} ask ≈ $${cost.toFixed(2)} to win $1.00, gross upside ≈ $${grossProfit.toFixed(2)}. ${tooExpensive ? 'Too little reward for late-window risk.' : thin ? 'Thin payout; only acceptable if the setup is very clean.' : 'Payout is not overly compressed.'}`,
+    severity: tooExpensive ? 'block' : thin ? 'warn' : 'ok',
+  };
+}
+
+function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, countdown: Countdown, qualityFilter: QualityFilter, snapshot: MarketSnapshot): EntryGate[] {
   const direction = activeSignal?.direction ?? decision.direction;
   const stability = activeSignal?.stability ?? decision.stability;
   const confirmations = activeSignal?.confirmations ?? 0;
@@ -968,9 +1076,10 @@ function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, co
     {
       label: 'Settlement risk',
       passed: decision.settlement.risk === 'Low',
-      detail: `${decision.settlement.risk}. Clean ENTER needs Low settlement risk in Genesis-014. ${decision.settlement.message}`,
+      detail: `${decision.settlement.risk}. Clean ENTER needs Low settlement risk in Genesis-015. ${decision.settlement.message}`,
       severity: decision.settlement.risk === 'Extreme' || decision.settlement.risk === 'High' ? 'block' : 'warn',
     },
+    buildValueGate(direction, countdown, snapshot),
     {
       label: 'Quality filter',
       passed: gradeValue >= neededGrade,
@@ -981,6 +1090,7 @@ function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, co
 
 function buildLateEntryWarning(decision: Decision, countdown: Countdown) {
   if (countdown.remainingMs > 360000) return null;
+  if (countdown.remainingMs <= 180000) return `Only ${countdown.display} remains. Genesis-015 blocks fresh late entries because the last 3 minutes are too jumpy and the payout is often too small.`;
   if (decision.settlement.risk === 'Low' && decision.entryScore >= 82) return null;
   const required = decision.settlement.requiredMove === null ? 'unknown' : `$${decision.settlement.requiredMove.toFixed(0)}`;
   const realistic = decision.settlement.realisticMove === null ? 'unknown' : `$${decision.settlement.realisticMove.toFixed(0)}`;

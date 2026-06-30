@@ -56,7 +56,7 @@ export function calculateDecision(snapshot: MarketSnapshot, countdown: Countdown
   const guardrails = buildGuardrails(direction, distance, countdown, indicators, atr);
 
   const rawConfidence = 40 + directionalStrength * 0.88 + stability * 0.15 - guardrails.confidencePenalty;
-  const confidenceCap = countdown.remainingMs <= 60_000 ? 76 : countdown.remainingMs <= 180_000 ? 82 : 88;
+  const confidenceCap = countdown.remainingMs <= 60_000 ? 70 : countdown.remainingMs <= 180_000 ? 74 : countdown.remainingMs <= 360_000 ? 82 : 88;
   const confidence = Math.round(clamp(rawConfidence, 0, confidenceCap));
 
   const rawOpportunity = 20 + directionalStrength * 1.30 + stability * 0.18 - volatilityPenalty(indicators) - guardrails.opportunityPenalty;
@@ -66,9 +66,9 @@ export function calculateDecision(snapshot: MarketSnapshot, countdown: Countdown
   if (guardrails.blockEnter) {
     action = guardrails.forceAvoid ? 'AVOID' : direction === 'NONE' ? 'WAIT' : `WATCH ${direction}` as Decision['action'];
   } else if (direction === 'NONE') action = opportunity < 38 ? 'AVOID' : 'WAIT';
-  else if (opportunity >= 88 && confidence >= 78 && stability >= 70 && guardrails.settlement.risk !== 'High' && guardrails.settlement.risk !== 'Extreme') action = `ENTER ${direction}` as Decision['action'];
-  else if (opportunity >= 74 && confidence >= 66 && stability >= 58) action = `LEAN ${direction}` as Decision['action'];
-  else if (opportunity >= 56 && confidence >= 54) action = `WATCH ${direction}` as Decision['action'];
+  else if (opportunity >= 90 && confidence >= 80 && stability >= 72 && guardrails.settlement.risk !== 'High' && guardrails.settlement.risk !== 'Extreme') action = `ENTER ${direction}` as Decision['action'];
+  else if (opportunity >= 76 && confidence >= 68 && stability >= 60) action = `LEAN ${direction}` as Decision['action'];
+  else if (opportunity >= 58 && confidence >= 55) action = `WATCH ${direction}` as Decision['action'];
   else if (opportunity < 34) action = 'AVOID';
 
   const tone: Decision['tone'] = action.startsWith('ENTER') ? 'good' : action.startsWith('LEAN') || action.startsWith('WATCH') ? 'warn' : action === 'AVOID' ? 'bad' : 'neutral';
@@ -257,6 +257,16 @@ function buildGuardrails(direction: Decision['direction'], distance: number | nu
     messages.push('Late volatility is elevated, so Edge15 reduces confidence and avoids treating the setup like a lock.');
   }
 
+  // Genesis-015: the last three minutes have produced too many late flips and poor
+  // payout-to-risk entries. Edge15 should manage an existing committed idea here,
+  // not open fresh late trades unless a future value engine explicitly proves the payout is worth it.
+  if (seconds <= 180 && direction !== 'NONE') {
+    blockEnter = true;
+    confidencePenalty += seconds <= 60 ? 24 : 16;
+    opportunityPenalty += seconds <= 60 ? 34 : 24;
+    if (risk === 'Low') risk = 'Medium';
+    messages.push('Final-3-minute chaos guard: Edge15 will not open a fresh entry this late. The market can flip fast and the payout is often too small for the risk.');
+  }
 
   if (direction !== 'NONE' && distance !== null && seconds <= 540) {
     const correctSide = (direction === 'OVER' && distance > 0) || (direction === 'UNDER' && distance < 0);
