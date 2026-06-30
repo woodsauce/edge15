@@ -1,11 +1,11 @@
-# Edge15 Genesis-004
+# Edge15 Genesis-005
 
-Countdown + indicator engine for the Genesis live-data foundation.
+Signal Stability + Trade Plan for the Edge15 Genesis foundation.
 
-Upload the contents of this folder into the root of `woodsauce/edge15` and commit:
+Upload the **contents** of this folder into the root of `woodsauce/edge15` and commit:
 
 ```text
-Genesis-004: add countdown and indicator engine
+Genesis-005: add signal stability and trade plan
 ```
 
 Then let Vercel redeploy and test:
@@ -16,28 +16,25 @@ Then let Vercel redeploy and test:
 
 ## Added
 
-- Bigger 15-minute countdown remains at top.
-- Indicator engine output on dashboard:
-  - RSI 14
-  - EMA 9/21 bias
-  - VWAP relationship
-  - Momentum 5m
-  - ATR 14
-  - Volatility percent
-- Decision engine now outputs:
-  - Entry Score
-  - Opportunity
-  - Trade Grade
-  - Confidence
-  - Stability
-  - Why Not panel
-  - Better Market Story
+- Contract-level signal plan for the active 15-minute window
+- NO PLAN / BUILDING / WATCH / LEAN / READY / ENTER ladder
+- Signal Stability meter
+- Confirmation points before ENTER
+- Flip protection so one refresh cannot instantly reverse direction
+- HOLD SIGNAL / CAUTION states before entry
+- Next Step panel
+- Invalidation panel
+- Raw model read display
+- Local storage persistence for the active signal plan
 
-## Not included yet
+## Kept from Genesis-004
 
-This is still Genesis core. Position manager, full AI Debate, historical pattern matching, and hide/show sections come later.
+- Entered OVER / Entered UNDER buttons
+- Locked trade snapshot
+- Position mode
+- HOLD / CAUTION / DANGER after entry
+- Clear / contract ended button
 
+## Why this matters
 
-## Genesis-004
-
-Adds locked trade mode and Position Manager: Entered OVER/UNDER, HOLD/CAUTION/DANGER, entry snapshot, post-entry warnings, and Clear / contract ended.
+Genesis-005 fixes the pre-entry whipsaw problem. Edge15 still recalculates every refresh, but the dashboard now shows a stabilized trade plan instead of treating every 3-second update as a brand-new recommendation.

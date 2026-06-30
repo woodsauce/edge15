@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Panel } from '@/components/ui/Panel';
 import { Metric } from '@/components/ui/Metric';
 import type { FeedDiagnostic, MarketSnapshot } from '@/lib/types/market';
@@ -8,6 +8,8 @@ import type { LockedPosition, TradeSide } from '@/lib/types/position';
 import { calculateDecision } from '@/lib/decision/calculateDecision';
 import { buildCountdown } from '@/lib/position/countdown';
 import { assessPosition, createLockedPosition, POSITION_STORAGE_KEY } from '@/lib/position/positionManager';
+import { SIGNAL_PLAN_STORAGE_KEY, updateSignalPlan } from '@/lib/signal/signalPlan';
+import type { SignalPlan } from '@/lib/types/signal';
 
 const blankDiagnostic = (message: string): FeedDiagnostic => ({
   status: 'unknown',
@@ -45,6 +47,7 @@ export function GenesisDashboard() {
   const [apiTest, setApiTest] = useState<ApiTest>({});
   const [testing, setTesting] = useState(false);
   const [position, setPosition] = useState<LockedPosition | null>(null);
+  const [signalPlan, setSignalPlan] = useState<SignalPlan | null>(null);
 
   useEffect(() => {
     const clock = window.setInterval(() => setNow(new Date()), 1000);
@@ -59,6 +62,17 @@ export function GenesisDashboard() {
       if (parsed?.side === 'OVER' || parsed?.side === 'UNDER') setPosition(parsed);
     } catch {
       window.localStorage.removeItem(POSITION_STORAGE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(SIGNAL_PLAN_STORAGE_KEY);
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved) as SignalPlan;
+      if (parsed?.contractKey && parsed?.displayAction) setSignalPlan(parsed);
+    } catch {
+      window.localStorage.removeItem(SIGNAL_PLAN_STORAGE_KEY);
     }
   }, []);
 
@@ -119,6 +133,29 @@ export function GenesisDashboard() {
   const positionAssessment = useMemo(() => position ? assessPosition(position, snapshot, decision, countdown) : null, [position, snapshot, decision, countdown]);
   const priceFeedLive = snapshot.btcPrice !== null && snapshot.candles.length >= 10;
 
+  const latestDecisionRef = useRef(decision);
+  const latestCountdownRef = useRef(countdown);
+  const latestNowRef = useRef(now);
+  latestDecisionRef.current = decision;
+  latestCountdownRef.current = countdown;
+  latestNowRef.current = now;
+
+  useEffect(() => {
+    if (position) return;
+    setSignalPlan((previous) => {
+      const next = updateSignalPlan({
+        previous,
+        decision: latestDecisionRef.current,
+        countdown: latestCountdownRef.current,
+        now: latestNowRef.current,
+      });
+      window.localStorage.setItem(SIGNAL_PLAN_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, [snapshot.fetchedAt, position]);
+
+  const activeSignal = signalPlan;
+
   const price = snapshot.btcPrice ? `$${snapshot.btcPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : 'Loading';
   const strike = snapshot.strike ? `$${snapshot.strike.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'Detecting';
   const distance = snapshot.btcPrice && snapshot.strike ? snapshot.btcPrice - snapshot.strike : null;
@@ -127,7 +164,7 @@ export function GenesisDashboard() {
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-4 px-4 py-5 sm:px-6">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-004</div>
+          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-005</div>
           <h1 className="text-3xl font-black tracking-tight">Edge15</h1>
         </div>
         <div className={`rounded-full border px-3 py-2 text-xs ${priceFeedLive ? 'border-edge-green/40 bg-edge-green/10 text-edge-green' : 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber'}`}>
@@ -160,11 +197,25 @@ export function GenesisDashboard() {
       ) : (
         <Panel title="Entry mode">
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            <Metric label="Recommendation" value={decision.action} detail={decision.reason} tone={decision.tone} />
-            <Metric label="Entry Score" value={`${decision.entryScore}/100`} detail={decision.entryQuality} tone={decision.tone} />
+            <Metric label="Trade Plan" value={activeSignal?.displayAction ?? decision.action} detail={activeSignal?.planText ?? decision.reason} tone={activeSignal?.tone ?? decision.tone} />
+            <Metric label="Entry Score" value={`${decision.entryScore}/100`} detail={decision.entryQuality} tone={activeSignal?.tone ?? decision.tone} />
             <Metric label="Opportunity" value={`${decision.opportunity}%`} detail={decision.opportunityLabel} tone={decision.opportunity > 75 ? 'good' : decision.opportunity > 55 ? 'warn' : 'bad'} />
-            <Metric label="Trade Grade" value={decision.tradeGrade} detail={`${decision.confidence}% confidence`} tone={decision.tone} />
-            <Metric label="Stability" value={`${decision.stability}%`} detail="Signal agreement" tone={decision.stability > 70 ? 'good' : decision.stability > 55 ? 'warn' : 'bad'} />
+            <Metric label="Trade Grade" value={decision.tradeGrade} detail={`${decision.confidence}% confidence`} tone={activeSignal?.tone ?? decision.tone} />
+            <Metric label="Signal Stability" value={`${activeSignal?.stability ?? decision.stability}%`} detail={activeSignal ? `${activeSignal.status} • ${activeSignal.confirmations} confirmations` : 'Building plan'} tone={(activeSignal?.stability ?? decision.stability) > 70 ? 'good' : (activeSignal?.stability ?? decision.stability) > 55 ? 'warn' : 'bad'} />
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border border-edge-line bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-edge-muted">Next step</div>
+              <div className="mt-2 text-sm leading-6 text-slate-200">{activeSignal?.nextStep ?? 'Waiting for the first stable plan.'}</div>
+            </div>
+            <div className="rounded-2xl border border-edge-line bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-edge-muted">Invalidation</div>
+              <div className="mt-2 text-sm leading-6 text-slate-200">{activeSignal?.invalidation ?? 'No active invalidation yet.'}</div>
+            </div>
+            <div className="rounded-2xl border border-edge-line bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-edge-muted">Raw model</div>
+              <div className="mt-2 text-sm leading-6 text-slate-200">Current raw read: {decision.action}. Genesis-005 smooths this into a contract-level trade plan.</div>
+            </div>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <button onClick={() => lockPosition('OVER')} disabled={!snapshot.btcPrice} className="rounded-2xl border border-edge-green/40 bg-edge-green/10 px-4 py-4 text-lg font-black text-edge-green disabled:opacity-40">Entered OVER</button>
@@ -218,9 +269,9 @@ export function GenesisDashboard() {
           </div>
         </Panel>
 
-        <Panel title={position ? 'Position warnings' : 'Why not?'}>
+        <Panel title={position ? 'Position warnings' : 'Why not / trade plan?'}>
           <ul className="space-y-2 text-sm text-slate-200">
-            {(positionAssessment?.reasons ?? decision.whyNot).map((item) => (
+            {(positionAssessment?.reasons ?? [activeSignal?.planText, activeSignal?.nextStep, activeSignal?.invalidation, ...decision.whyNot].filter(Boolean) as string[]).map((item) => (
               <li key={item} className="rounded-xl border border-edge-line bg-black/20 p-3">{item}</li>
             ))}
           </ul>
@@ -228,16 +279,16 @@ export function GenesisDashboard() {
       </div>
 
       <Panel title={position ? 'Position story' : 'Market story'}>
-        <p className="text-base leading-7 text-slate-200">{positionAssessment?.story ?? decision.story}</p>
+        <p className="text-base leading-7 text-slate-200">{positionAssessment?.story ?? `${activeSignal?.planText ?? ''} ${decision.story}`}</p>
       </Panel>
 
-      <Panel title="Genesis-004 status">
+      <Panel title="Genesis-005 status">
         <ul className="list-disc space-y-2 pl-5 text-sm text-edge-muted">
-          <li>Entry mode still shows recommendation, Entry Score, Opportunity, Trade Grade, Confidence, and Stability.</li>
-          <li>Entered OVER / Entered UNDER locks the trade snapshot in local storage.</li>
-          <li>Locked position mode switches the main status to HOLD / CAUTION / DANGER.</li>
-          <li>Position Manager tracks entry price, reference, current distance, and post-entry warnings.</li>
-          <li>Clear / contract ended returns Edge15 to entry mode.</li>
+          <li>Signal plan now stabilizes pre-entry advice across the active 15-minute contract.</li>
+          <li>Raw model reads are smoothed into NO PLAN / WATCH / LEAN / READY / ENTER.</li>
+          <li>Flip protection prevents instant OVER-to-UNDER changes unless reversal pressure persists.</li>
+          <li>Invalidation and next-step text explains what must happen before the plan changes.</li>
+          <li>Position Manager from Genesis-004 remains intact after entering OVER or UNDER.</li>
         </ul>
       </Panel>
     </main>

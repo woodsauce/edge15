@@ -1,6 +1,6 @@
 {
   "name": "edge15",
-  "version": "0.4.0-genesis",
+  "version": "0.5.0-genesis",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -15,7 +15,7 @@
     "@vercel/analytics": "latest",
     "clsx": "latest",
     "lucide-react": "latest",
-    "next": "^15.3.0",
+    "next": "15.5.19",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "recharts": "latest",
