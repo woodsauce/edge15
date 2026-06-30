@@ -1,34 +1,34 @@
-# Edge15 Genesis-008
+# Edge15 Genesis-009
 
-Genesis-008 is a safety correction and market-context upgrade for the working Edge15 Genesis line.
+Genesis-009 is a dashboard layout correction release. It keeps the working Genesis-008 decision and settlement guardrails, but reorganizes the main screen into a cleaner dashboard-style interface.
 
-## Commit message
+Commit message:
 
 ```text
-Genesis-008: add settlement guardrails and 15m context
+Genesis-009: redesign dashboard layout and hide unreliable period strip
 ```
 
-## What's new
+## What changed
 
-- Settlement Reality Check stops bad late entries when price/time/distance do not support the side.
-- Late signals are labeled through risk instead of using a blind final-minute lockout.
-- Confidence is capped so Edge15 does not imply certainty.
-- OVER wording is highlighted green and UNDER wording red across trade-plan context.
-- Engine cards show current confidence versus a rolling in-browser average.
-- Top dashboard now shows the last 10 completed 15-minute periods as UP/DOWN context.
-- Genesis-007 helper descriptions and persistent trade context remain intact.
+- New dashboard-style top layout.
+- Big countdown and current trade plan now sit together in the primary hero area.
+- Market snapshot is beside the main decision area instead of buried lower on the page.
+- Decision metrics are grouped into a clear dashboard card.
+- Position mode is embedded inside the decision dashboard instead of replacing context.
+- The incorrect “last 10 completed 15-minute periods” strip is hidden until period-boundary logic is verified.
+- OVER words remain green and UNDER words remain red.
+- Genesis-008 settlement guardrails remain intact.
+- Genesis-007 helper descriptions, Genesis-006 AI Trading Desk, Genesis-005 stability, and Genesis-004 position mode remain intact.
 
-## Upload instructions
+## How to install
 
-Upload the **contents** of this folder into the existing `woodsauce/edge15` GitHub repo root.
+Upload the contents of this folder to the existing `woodsauce/edge15` GitHub repo root.
 
-Do not upload the outer folder or ZIP.
+## How to test
 
-After Vercel deploys, verify:
-
-- Header says Genesis-008.
-- Last 10 completed 15-minute periods show near the top.
-- Settlement Risk shows normal/settlement mode and a late-entry risk message.
-- Engine cards show Current vs Rolling avg.
-- OVER words appear green and UNDER words red in trade-plan context.
-- Pressing Entered OVER/UNDER keeps the trade context visible and adds Locked Position Mode below it.
+1. Confirm Vercel deployment is Ready.
+2. Open the app and confirm the header says Genesis-009.
+3. Confirm the dashboard shows: Time Remaining, Current Trade Plan, Market Snapshot, Decision Dashboard, and Market Story.
+4. Confirm Entry Score, Opportunity, Trade Grade, Model Trust, Signal Stability, and Settlement Risk still display.
+5. Press Entered OVER/UNDER and confirm the locked position panel appears without hiding the decision metrics.
+6. Confirm the last-10 completed-period strip is no longer visible.

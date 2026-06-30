@@ -184,6 +184,8 @@ export function GenesisDashboard() {
       window.localStorage.setItem(ENGINE_AVERAGE_STORAGE_KEY, JSON.stringify(next));
       return next;
     });
+  // Intentionally keyed to fetchedAt so rolling averages update once per market-data refresh.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot.fetchedAt]);
 
   const latestDecisionRef = useRef(decision);
@@ -224,10 +226,10 @@ export function GenesisDashboard() {
   const distance = snapshot.btcPrice && snapshot.strike ? snapshot.btcPrice - snapshot.strike : null;
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-4 px-4 py-5 sm:px-6">
+    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-008</div>
+          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-009</div>
           <h1 className="text-3xl font-black tracking-tight">Edge15</h1>
         </div>
         <div className={`rounded-full border px-3 py-2 text-xs ${priceFeedLive ? 'border-edge-green/40 bg-edge-green/10 text-edge-green' : 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber'}`}>
@@ -235,187 +237,104 @@ export function GenesisDashboard() {
         </div>
       </header>
 
-      <Panel className="text-center">
-        <div className="text-sm uppercase tracking-[0.22em] text-edge-muted">Time remaining</div>
-        <div className="mt-1 text-6xl font-black tracking-tighter sm:text-7xl">{countdown.display}</div>
-        <div className="mt-2 text-sm text-edge-muted">Current 15-minute window • live data refreshes every 3 seconds</div>
-      </Panel>
-
-      <Panel title="Last 10 completed 15-minute periods">
-        {snapshot.recentPeriods.length ? (
-          <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">
-            {snapshot.recentPeriods.map((period, index) => (
-              <div
-                key={`${period.startTime}-${index}`}
-                className={`rounded-2xl border px-2 py-3 text-center ${period.direction === 'UP' ? 'border-edge-green/40 bg-edge-green/10' : period.direction === 'DOWN' ? 'border-edge-red/40 bg-edge-red/10' : 'border-edge-line bg-black/20'}`}
-              >
-                <div className="text-[10px] uppercase tracking-[0.16em] text-edge-muted">{formatPeriodTime(period.startTime)}</div>
-                <div className={`mt-1 text-lg font-black ${period.direction === 'UP' ? 'text-edge-green' : period.direction === 'DOWN' ? 'text-edge-red' : 'text-white'}`}>{period.direction}</div>
-                <div className="mt-1 text-[11px] text-slate-400">{period.change >= 0 ? '+' : ''}${period.change.toFixed(0)}</div>
+      <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+        <Panel className="overflow-hidden bg-gradient-to-br from-slate-950 via-edge-panel to-black">
+          <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+            <div className="rounded-3xl border border-edge-line bg-black/25 p-5 text-center">
+              <div className="text-sm uppercase tracking-[0.22em] text-edge-muted">Time remaining</div>
+              <div className="mt-2 text-6xl font-black tracking-tighter sm:text-7xl">{countdown.display}</div>
+              <div className="mt-3 text-xs text-edge-muted">Current 15-minute window • refreshes every 3 seconds</div>
+            </div>
+            <div className="space-y-3">
+              <div className="text-xs uppercase tracking-[0.22em] text-edge-muted">Current trade plan</div>
+              <div className={`rounded-3xl border px-5 py-6 ${badgeClass(activeSignal?.tone ?? decision.tone)}`}>
+                <div className="text-4xl font-black tracking-tight sm:text-5xl">{highlightText(activeSignal?.displayAction ?? decision.action)}</div>
+                <div className="mt-3 text-sm leading-6 text-slate-300">{highlightText(activeSignal?.planText ?? decision.reason)}</div>
+                <div className="mt-4 rounded-2xl border border-edge-line bg-black/20 px-3 py-3 text-xs leading-5 text-slate-400">
+                  {highlightText(tradePlanHelp(activeSignal?.status, activeSignal?.direction ?? decision.direction))}
+                </div>
               </div>
-            ))}
+            </div>
           </div>
-        ) : (
-          <div className="rounded-2xl border border-edge-line bg-black/20 p-4 text-sm text-edge-muted">Waiting for enough candle history to summarize the last completed 15-minute periods.</div>
-        )}
-        <div className="mt-3 text-xs text-edge-muted">Green means the completed 15-minute period closed above where it opened. Red means it closed below where it opened. This is context only; it is not a trade signal by itself.</div>
-      </Panel>
+        </Panel>
 
-      <Panel title="Workspace controls">
+        <Panel title="Market snapshot">
+          <div className="grid grid-cols-2 gap-3">
+            <Metric label="BTC" value={price} detail={snapshot.source} tone="blue" />
+            <Metric label="Reference" value={strike} detail={snapshot.kalshi?.derivedStrike ? 'Derived 15m open' : snapshot.kalshi?.strikeSource ? `Source: ${snapshot.kalshi.strikeSource}` : snapshot.kalshi?.ticker ?? 'Kalshi optional'} />
+            <Metric label="Distance" value={distance === null ? '—' : `${distance >= 0 ? '+' : ''}$${distance.toFixed(0)}`} detail={distance === null ? 'Waiting for reference' : distance >= 0 ? 'Above strike' : 'Below strike'} tone={distance === null ? 'neutral' : distance >= 0 ? 'good' : 'bad'} />
+            <Metric label="Settlement Risk" value={decision.settlement.risk} detail={decision.settlement.mode === 'settlement' ? 'Final 2m reality check' : 'Normal mode'} help={decision.settlement.message} tone={decision.settlement.risk === 'Low' ? 'good' : decision.settlement.risk === 'Medium' ? 'warn' : 'bad'} />
+          </div>
+          <div className="mt-3 rounded-2xl border border-edge-line bg-black/20 p-3 text-xs leading-5 text-edge-muted">
+            The previous “last 10 periods” strip is temporarily hidden because it was not matching the real 15-minute outcomes reliably. We will re-add it only after the period boundaries are verified.
+          </div>
+        </Panel>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-[1fr_0.85fr]">
+        <Panel title={position ? "Trade context + position" : "Decision dashboard"}>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <Metric label="Entry Score" value={`${decision.entryScore}/100`} detail={decision.entryQuality} help={entryScoreHelp(decision.entryScore)} tone={activeSignal?.tone ?? decision.tone} />
+            <Metric label="Opportunity" value={`${decision.opportunity}%`} detail={decision.opportunityLabel} help={opportunityHelp(decision.opportunity)} tone={decision.opportunity > 75 ? 'good' : decision.opportunity > 55 ? 'warn' : 'bad'} />
+            <Metric label="Trade Grade" value={decision.tradeGrade} detail={`${decision.confidence}% confidence`} help={tradeGradeHelp(decision.tradeGrade)} tone={activeSignal?.tone ?? decision.tone} />
+            <Metric label="Model Trust" value={`${tradingDesk.modelConfidence}%`} detail="Chief AI self-check" help={modelTrustHelp(tradingDesk.modelConfidence)} tone={tradingDesk.modelConfidence >= 75 ? 'good' : tradingDesk.modelConfidence >= 58 ? 'warn' : 'bad'} />
+            <Metric label="Signal Stability" value={`${activeSignal?.stability ?? decision.stability}%`} detail={activeSignal ? `${activeSignal.status} • ${activeSignal.confirmations} confirmations` : 'Building plan'} help={signalStabilityHelp(activeSignal?.stability ?? decision.stability)} tone={(activeSignal?.stability ?? decision.stability) > 70 ? 'good' : (activeSignal?.stability ?? decision.stability) > 55 ? 'warn' : 'bad'} />
+            <Metric label="Candles" value={`${snapshot.candles.length}`} detail="1m candles available" help="More candle history gives Edge15 a stronger indicator read." tone={snapshot.candles.length >= 10 ? 'good' : 'warn'} />
+          </div>
+
+          {position && positionAssessment ? (
+            <div className="mt-4 rounded-3xl border border-edge-blue/30 bg-edge-blue/10 p-4">
+              <div className="mb-3 text-xs uppercase tracking-[0.22em] text-edge-muted">Locked position mode</div>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <Metric label="Position" value={position.side} detail={`Locked with ${position.entryWindow} remaining`} help="The side you said you entered. Edge15 now manages the position instead of looking for a new entry." tone="blue" />
+                <Metric label="Status" value={positionAssessment.status} detail={positionAssessment.riskLabel} help="HOLD means the trade is still behaving normally. CAUTION means pressure is building. DANGER means the plan may be failing." tone={positionAssessment.tone} />
+                <Metric label="Entry" value={position.entryPrice === null ? '—' : `$${position.entryPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}`} detail={`Grade ${position.entryGrade} • score ${position.entryScore}`} help="Snapshot of the setup when you pressed Entered OVER or Entered UNDER." tone="neutral" />
+                <Metric label="Since Entry" value={positionAssessment.distanceSinceEntry === null ? '—' : `${positionAssessment.distanceSinceEntry >= 0 ? '+' : ''}$${positionAssessment.distanceSinceEntry.toFixed(0)}`} detail="BTC move from lock" help="Shows whether BTC has moved with or against your locked side since entry." tone={positionAssessment.distanceSinceEntry === null ? 'neutral' : positionAssessment.distanceSinceEntry >= 0 === (position.side === 'OVER') ? 'good' : 'bad'} />
+              </div>
+              <div className="mt-4 rounded-2xl border border-edge-line bg-black/20 p-4 text-sm leading-6 text-slate-200">{positionAssessment.story}</div>
+              <button onClick={clearPosition} className="mt-4 w-full rounded-xl border border-edge-line bg-slate-950 px-3 py-3 text-sm font-bold text-white hover:border-edge-blue/60">Clear / contract ended</button>
+            </div>
+          ) : (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <button onClick={() => lockPosition('OVER')} disabled={!snapshot.btcPrice} className="rounded-2xl border border-edge-green/40 bg-edge-green/10 px-4 py-4 text-lg font-black text-edge-green disabled:opacity-40">Entered OVER</button>
+              <button onClick={() => lockPosition('UNDER')} disabled={!snapshot.btcPrice} className="rounded-2xl border border-edge-red/40 bg-edge-red/10 px-4 py-4 text-lg font-black text-edge-red disabled:opacity-40">Entered UNDER</button>
+            </div>
+          )}
+        </Panel>
+
+        <Panel title={position ? 'Position story' : 'Market story'}>
+          <p className="text-base leading-7 text-slate-200">{positionAssessment?.story ?? tradingDesk.marketStory}</p>
+        </Panel>
+      </section>
+
+      <Panel title="View controls">
         <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
           {Object.entries(visibleSections).map(([key, visible]) => (
-            <button
-              key={key}
-              onClick={() => toggleSection(key as SectionKey)}
-              className={`rounded-xl border px-3 py-2 text-xs font-bold ${visible ? 'border-edge-blue/50 bg-edge-blue/10 text-edge-blue' : 'border-edge-line bg-black/20 text-edge-muted'}`}
-            >
+            <button key={key} onClick={() => toggleSection(key as SectionKey)} className={`rounded-xl border px-3 py-2 text-xs font-bold ${visible ? 'border-edge-blue/50 bg-edge-blue/10 text-edge-blue' : 'border-edge-line bg-black/20 text-edge-muted'}`}>
               {visible ? 'Hide' : 'Show'} {sectionLabel(key as SectionKey)}
             </button>
           ))}
         </div>
       </Panel>
 
-      <Panel title={position ? "Trade context" : "Entry mode"}>
-        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <Metric
-            label="Trade Plan"
-            value={activeSignal?.displayAction ?? decision.action}
-            detail={activeSignal?.planText ?? decision.reason}
-            help={tradePlanHelp(activeSignal?.status, activeSignal?.direction ?? decision.direction)}
-            tone={activeSignal?.tone ?? decision.tone}
-          />
-          <Metric
-            label="Entry Score"
-            value={`${decision.entryScore}/100`}
-            detail={decision.entryQuality}
-            help={entryScoreHelp(decision.entryScore)}
-            tone={activeSignal?.tone ?? decision.tone}
-          />
-          <Metric
-            label="Opportunity"
-            value={`${decision.opportunity}%`}
-            detail={decision.opportunityLabel}
-            help={opportunityHelp(decision.opportunity)}
-            tone={decision.opportunity > 75 ? 'good' : decision.opportunity > 55 ? 'warn' : 'bad'}
-          />
-          <Metric
-            label="Trade Grade"
-            value={decision.tradeGrade}
-            detail={`${decision.confidence}% confidence`}
-            help={tradeGradeHelp(decision.tradeGrade)}
-            tone={activeSignal?.tone ?? decision.tone}
-          />
-          <Metric
-            label="Model Trust"
-            value={`${tradingDesk.modelConfidence}%`}
-            detail="Chief AI self-check"
-            help={modelTrustHelp(tradingDesk.modelConfidence)}
-            tone={tradingDesk.modelConfidence >= 75 ? 'good' : tradingDesk.modelConfidence >= 58 ? 'warn' : 'bad'}
-          />
-          <Metric
-            label="Signal Stability"
-            value={`${activeSignal?.stability ?? decision.stability}%`}
-            detail={activeSignal ? `${activeSignal.status} • ${activeSignal.confirmations} confirmations` : 'Building plan'}
-            help={signalStabilityHelp(activeSignal?.stability ?? decision.stability)}
-            tone={(activeSignal?.stability ?? decision.stability) > 70 ? 'good' : (activeSignal?.stability ?? decision.stability) > 55 ? 'warn' : 'bad'}
-          />
-          <Metric
-            label="Settlement Risk"
-            value={decision.settlement.risk}
-            detail={decision.settlement.mode === 'settlement' ? 'Final 2m reality check' : 'Normal mode'}
-            help={decision.settlement.message}
-            tone={decision.settlement.risk === 'Low' ? 'good' : decision.settlement.risk === 'Medium' ? 'warn' : 'bad'}
-          />
-        </div>
-        {position ? (
-          <div className="mt-4 rounded-xl border border-edge-blue/30 bg-edge-blue/10 px-3 py-3 text-xs text-edge-muted">
-            Trade context stays visible after entry so you can compare the original plan against the current HOLD / CAUTION / DANGER assessment.
-          </div>
-        ) : (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <button onClick={() => lockPosition('OVER')} disabled={!snapshot.btcPrice} className="rounded-2xl border border-edge-green/40 bg-edge-green/10 px-4 py-4 text-lg font-black text-edge-green disabled:opacity-40">Entered OVER</button>
-            <button onClick={() => lockPosition('UNDER')} disabled={!snapshot.btcPrice} className="rounded-2xl border border-edge-red/40 bg-edge-red/10 px-4 py-4 text-lg font-black text-edge-red disabled:opacity-40">Entered UNDER</button>
-          </div>
-        )}
-      </Panel>
-
-      {position && positionAssessment ? (
-        <Panel title="Locked position mode">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Metric label="Position" value={position.side} detail={`Locked with ${position.entryWindow} remaining`} help="The side you said you entered. Edge15 now manages the position instead of looking for a new entry." tone="blue" />
-            <Metric label="Status" value={positionAssessment.status} detail={positionAssessment.riskLabel} help="HOLD means the trade is still behaving normally. CAUTION means pressure is building. DANGER means the plan may be failing." tone={positionAssessment.tone} />
-            <Metric label="Entry" value={position.entryPrice === null ? '—' : `$${position.entryPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}`} detail={`Grade ${position.entryGrade} • score ${position.entryScore}`} help="Snapshot of the setup when you pressed Entered OVER or Entered UNDER." tone="neutral" />
-            <Metric label="Since Entry" value={positionAssessment.distanceSinceEntry === null ? '—' : `${positionAssessment.distanceSinceEntry >= 0 ? '+' : ''}$${positionAssessment.distanceSinceEntry.toFixed(0)}`} detail="BTC move from lock" help="Shows whether BTC has moved with or against your locked side since entry." tone={positionAssessment.distanceSinceEntry === null ? 'neutral' : positionAssessment.distanceSinceEntry >= 0 === (position.side === 'OVER') ? 'good' : 'bad'} />
-          </div>
-          <div className="mt-4 rounded-2xl border border-edge-line bg-black/20 p-4 text-sm leading-6 text-slate-200">
-            {positionAssessment.story}
-          </div>
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            <button onClick={clearPosition} className="rounded-xl border border-edge-line bg-slate-950 px-3 py-3 text-sm font-bold text-white hover:border-edge-blue/60">Clear / contract ended</button>
-            <div className="rounded-xl border border-edge-line bg-black/20 px-3 py-3 text-xs text-edge-muted">Entry locked at {new Date(position.entryTime).toLocaleTimeString()} • Edge15 now manages HOLD / CAUTION / DANGER instead of new entry advice.</div>
-          </div>
-        </Panel>
-      ) : null}
-
       {visibleSections.aiDesk ? (
         <Panel title="AI Trading Desk">
-          <div className="rounded-2xl border border-edge-blue/30 bg-edge-blue/10 p-4 text-sm leading-6 text-slate-100">
-            {tradingDesk.chiefSummary}
+          <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+            <div className="rounded-2xl border border-edge-blue/30 bg-edge-blue/10 p-4 text-sm leading-6 text-slate-100">{tradingDesk.chiefSummary}</div>
+            <div className="rounded-2xl border border-edge-line bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-edge-muted">AI Debate</div>
+              <div className="mt-3 space-y-2 text-sm leading-6 text-slate-200">
+                {tradingDesk.debate.map((line) => <div key={line} className="rounded-xl border border-edge-line bg-black/20 p-3">{highlightText(line)}</div>)}
+              </div>
+            </div>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {tradingDesk.engines.map((engine) => <EngineCard key={engine.id} engine={engine} average={engineAverages[engine.id]} />)}
           </div>
-          <div className="mt-4 rounded-2xl border border-edge-line bg-black/20 p-4">
-            <div className="text-xs uppercase tracking-[0.18em] text-edge-muted">AI Debate</div>
-            <div className="mt-3 space-y-2 text-sm leading-6 text-slate-200">
-              {tradingDesk.debate.map((line) => <div key={line} className="rounded-xl border border-edge-line bg-black/20 p-3">{line}</div>)}
-            </div>
-          </div>
         </Panel>
       ) : null}
 
-      {visibleSections.marketStory ? (
-        <Panel title={position ? 'Position story' : 'Market story'}>
-          <p className="text-base leading-7 text-slate-200">{positionAssessment?.story ?? tradingDesk.marketStory}</p>
-        </Panel>
-      ) : null}
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <Panel title="Market">
-          <div className="grid grid-cols-2 gap-3">
-            <Metric label="BTC" value={price} detail={snapshot.source} tone="blue" />
-            <Metric label="Reference" value={strike} detail={snapshot.kalshi?.derivedStrike ? 'Derived from 15m window open candle' : snapshot.kalshi?.strikeSource ? `Source: ${snapshot.kalshi.strikeSource}` : snapshot.kalshi?.ticker ?? 'Kalshi optional'} />
-            <Metric label="Distance" value={distance === null ? '—' : `${distance >= 0 ? '+' : ''}$${distance.toFixed(0)}`} detail={distance === null ? 'Waiting for reference' : distance >= 0 ? 'Above strike' : 'Below strike'} tone={distance === null ? 'neutral' : distance >= 0 ? 'good' : 'bad'} />
-            <Metric label="Candles" value={`${snapshot.candles.length}`} detail="1m candles available" tone={snapshot.candles.length >= 10 ? 'good' : 'warn'} />
-          </div>
-        </Panel>
-
-        {visibleSections.dataHealth ? (
-          <Panel title="Data health">
-            <div className="space-y-2 text-sm">
-              <HealthRow label="Coinbase" diagnostic={snapshot.diagnostics.coinbase} />
-              <HealthRow label="Fallback" diagnostic={snapshot.diagnostics.fallback} />
-              <HealthRow label="Kalshi" diagnostic={snapshot.diagnostics.kalshi} />
-              <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
-                <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Kalshi odds</div>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-                  <div><span className="text-slate-500">YES bid</span><div className="font-semibold">{snapshot.kalshi?.yesBid ?? '—'}¢</div></div>
-                  <div><span className="text-slate-500">YES ask</span><div className="font-semibold">{snapshot.kalshi?.yesAsk ?? '—'}¢</div></div>
-                </div>
-                <div className="mt-2 text-xs text-slate-500">Source: {snapshot.kalshi?.oddsSource ?? 'not detected'}</div>
-              </div>
-              {error ? <div className="rounded-xl border border-edge-amber/40 bg-edge-amber/10 p-3 text-edge-amber">{error}</div> : null}
-              <div className="text-xs text-edge-muted">Last update: {snapshot.fetchedAt ? new Date(snapshot.fetchedAt).toLocaleTimeString() : 'not yet'}</div>
-              <button onClick={runApiTest} disabled={testing} className="w-full rounded-xl border border-edge-blue/40 bg-edge-blue/10 px-3 py-2 text-sm font-bold text-edge-blue disabled:opacity-60">
-                {testing ? 'Testing APIs...' : 'Run API Test'}
-              </button>
-              {Object.keys(apiTest).length ? <ApiTestResults results={apiTest} /> : null}
-            </div>
-          </Panel>
-        ) : null}
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
+      <section className="grid gap-4 md:grid-cols-2">
         {visibleSections.indicators ? (
           <Panel title="Indicators">
             <div className="grid grid-cols-2 gap-3">
@@ -432,22 +351,44 @@ export function GenesisDashboard() {
         {visibleSections.whyNot ? (
           <Panel title={position ? 'Position warnings' : 'Why not / trade plan?'}>
             <ul className="space-y-2 text-sm text-slate-200">
-              {(positionAssessment?.reasons ?? tradingDesk.whyNot).map((item) => (
-                <li key={item} className="rounded-xl border border-edge-line bg-black/20 p-3">{item}</li>
-              ))}
+              {(positionAssessment?.reasons ?? tradingDesk.whyNot).map((item) => <li key={item} className="rounded-xl border border-edge-line bg-black/20 p-3">{highlightText(item)}</li>)}
             </ul>
           </Panel>
         ) : null}
-      </div>
+      </section>
+
+      {visibleSections.dataHealth ? (
+        <Panel title="Data health">
+          <div className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
+            <div className="space-y-2 text-sm">
+              <HealthRow label="Coinbase" diagnostic={snapshot.diagnostics.coinbase} />
+              <HealthRow label="Fallback" diagnostic={snapshot.diagnostics.fallback} />
+              <HealthRow label="Kalshi" diagnostic={snapshot.diagnostics.kalshi} />
+              {error ? <div className="rounded-xl border border-edge-amber/40 bg-edge-amber/10 p-3 text-edge-amber">{error}</div> : null}
+              <div className="text-xs text-edge-muted">Last update: {snapshot.fetchedAt ? new Date(snapshot.fetchedAt).toLocaleTimeString() : 'not yet'}</div>
+            </div>
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Kalshi odds</div>
+                <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                  <div><span className="text-slate-500">YES bid</span><div className="font-semibold">{snapshot.kalshi?.yesBid ?? '—'}¢</div></div>
+                  <div><span className="text-slate-500">YES ask</span><div className="font-semibold">{snapshot.kalshi?.yesAsk ?? '—'}¢</div></div>
+                </div>
+                <div className="mt-2 text-xs text-slate-500">Source: {snapshot.kalshi?.oddsSource ?? 'not detected'}</div>
+              </div>
+              <button onClick={runApiTest} disabled={testing} className="w-full rounded-xl border border-edge-blue/40 bg-edge-blue/10 px-3 py-2 text-sm font-bold text-edge-blue disabled:opacity-60">{testing ? 'Testing APIs...' : 'Run API Test'}</button>
+              {Object.keys(apiTest).length ? <ApiTestResults results={apiTest} /> : null}
+            </div>
+          </div>
+        </Panel>
+      ) : null}
 
       {visibleSections.genesisStatus ? (
-        <Panel title="Genesis-008 status">
+        <Panel title="Genesis-009 status">
           <ul className="list-disc space-y-2 pl-5 text-sm text-edge-muted">
-            <li>Settlement Reality Check now weighs time remaining, distance, velocity, and volatility before allowing late entries.</li>
-            <li>Confidence is capped and late wrong-side entries are downgraded unless the required move is realistic.</li>
-            <li>OVER words display in green and UNDER words display in red across trade-plan context.</li>
-            <li>Engine cards now compare current confidence against the rolling average seen in this browser.</li>
-            <li>The top of the dashboard now shows the last 10 completed 15-minute periods as UP/DOWN context.</li>
+            <li>Dashboard-style layout replaces the long stacked card flow.</li>
+            <li>The incorrect last-10 completed-period strip is hidden until period-boundary logic is verified.</li>
+            <li>Core Genesis-008 settlement guardrails remain intact.</li>
             <li>Genesis-007 helper descriptions, Genesis-006 AI Trading Desk, Genesis-005 stability, and Genesis-004 position mode remain intact.</li>
           </ul>
         </Panel>
@@ -526,9 +467,6 @@ function buildFriendlyError(data: Partial<MarketSnapshot> & { error?: string }) 
   return data?.error ?? 'Market data request failed';
 }
 
-function formatPeriodTime(ms: number) {
-  return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
 
 function formatPrice(value: number | null) {
   return value === null ? '—' : `$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
@@ -583,6 +521,15 @@ function biasBadgeClass(bias: EngineVote['bias'], tone: 'neutral' | 'good' | 'wa
   if (bias === 'OVER') return 'border-edge-green/40 bg-edge-green/10 text-edge-green';
   if (bias === 'UNDER') return 'border-edge-red/40 bg-edge-red/10 text-edge-red';
   return badgeClass(tone);
+}
+
+function highlightText(text: string) {
+  const parts = text.split(/(OVER|UNDER)/g);
+  return parts.map((part, index) => {
+    if (part === 'OVER') return <span key={`${part}-${index}`} className="text-edge-green">OVER</span>;
+    if (part === 'UNDER') return <span key={`${part}-${index}`} className="text-edge-red">UNDER</span>;
+    return <span key={`${part}-${index}`}>{part}</span>;
+  });
 }
 
 
