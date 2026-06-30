@@ -34,6 +34,7 @@ const snapshot: MarketSnapshot = {
   strike: 59980,
   candles: [],
   recentPeriods: [],
+  orderBook: null,
   kalshi: null,
   health: { coinbase: 'ok', fallback: 'unknown', kalshi: 'ok' },
   diagnostics: {

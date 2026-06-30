@@ -28,6 +28,7 @@ const DEFAULT_SNAPSHOT: MarketSnapshot = {
   strike: null,
   candles: [],
   recentPeriods: [],
+  orderBook: null,
   kalshi: null,
   health: { coinbase: 'unknown', kalshi: 'unknown', fallback: 'unknown' },
   diagnostics: {
@@ -42,6 +43,7 @@ const SECTION_STORAGE_KEY = 'edge15.visibleSections.v1';
 const ENGINE_AVERAGE_STORAGE_KEY = 'edge15.engineAverages.v1';
 const ACTIVE_JOURNAL_ID_STORAGE_KEY = 'edge15.activeJournalEntryId.v1';
 const QUALITY_FILTER_STORAGE_KEY = 'edge15.tradeQualityFilter.v1';
+const COMMITMENT_ACCURACY_STORAGE_KEY = 'edge15.commitmentAccuracy.v1';
 const DEFAULT_VISIBLE_SECTIONS = {
   aiDesk: true,
   marketStory: true,
@@ -65,6 +67,18 @@ type EngineAverage = { average: number; samples: number };
 type EngineAverages = Record<string, EngineAverage>;
 type QualityFilter = 'ANY' | 'B_PLUS' | 'A_ONLY';
 type SignalHistoryPoint = { label: string; action: string; direction: string; confidence: number; entryScore: number };
+type CommitmentAccuracyRecord = {
+  contractKey: string;
+  committedDirection: 'OVER' | 'UNDER' | 'NONE';
+  outcome: 'OVER' | 'UNDER' | 'FLAT' | 'UNKNOWN';
+  correct: boolean | null;
+  committedAt: string | null;
+  resolvedAt: string;
+  open: number | null;
+  close: number | null;
+  entryScore: number | null;
+  confidence: number | null;
+};
 
 export function GenesisDashboard() {
   const [snapshot, setSnapshot] = useState<MarketSnapshot>(DEFAULT_SNAPSHOT);
@@ -80,6 +94,19 @@ export function GenesisDashboard() {
   const [activeJournalId, setActiveJournalId] = useState<string | null>(null);
   const [qualityFilter, setQualityFilter] = useState<QualityFilter>('ANY');
   const [signalHistory, setSignalHistory] = useState<SignalHistoryPoint[]>([]);
+  const [commitmentAccuracy, setCommitmentAccuracy] = useState<CommitmentAccuracyRecord[]>([]);
+
+  useEffect(() => {
+    const savedAccuracy = window.localStorage.getItem(COMMITMENT_ACCURACY_STORAGE_KEY);
+    if (savedAccuracy) {
+      try {
+        const parsed = JSON.parse(savedAccuracy) as CommitmentAccuracyRecord[];
+        if (Array.isArray(parsed)) setCommitmentAccuracy(parsed.slice(0, 10));
+      } catch {
+        window.localStorage.removeItem(COMMITMENT_ACCURACY_STORAGE_KEY);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const savedFilter = window.localStorage.getItem(QUALITY_FILTER_STORAGE_KEY) as QualityFilter | null;
@@ -243,10 +270,24 @@ export function GenesisDashboard() {
         countdown: latestCountdownRef.current,
         now: latestNowRef.current,
       });
+      if (previous && previous.contractKey !== next.contractKey) {
+        recordCommitmentOutcome(previous, snapshot.candles);
+      }
       window.localStorage.setItem(SIGNAL_PLAN_STORAGE_KEY, JSON.stringify(next));
       return next;
     });
-  }, [snapshot.fetchedAt, position]);
+  }, [snapshot.fetchedAt, position, snapshot.candles]);
+
+  function recordCommitmentOutcome(plan: SignalPlan, candles: MarketSnapshot['candles']) {
+    const record = resolveCommitmentOutcome(plan, candles);
+    if (!record) return;
+    setCommitmentAccuracy((previous) => {
+      if (previous.some((item) => item.contractKey === record.contractKey)) return previous;
+      const next = [record, ...previous].slice(0, 10);
+      window.localStorage.setItem(COMMITMENT_ACCURACY_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }
 
 
   useEffect(() => {
@@ -321,7 +362,7 @@ export function GenesisDashboard() {
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-012.1</div>
+          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-013</div>
           <h1 className="text-3xl font-black tracking-tight">Edge15</h1>
         </div>
         <div className={`rounded-full border px-3 py-2 text-xs ${priceFeedLive ? 'border-edge-green/40 bg-edge-green/10 text-edge-green' : 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber'}`}>
@@ -363,6 +404,11 @@ export function GenesisDashboard() {
             The previous “last 10 periods” strip is temporarily hidden because it was not matching the real 15-minute outcomes reliably. We will re-add it only after the period boundaries are verified.
           </div>
         </Panel>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+        <CommitmentAccuracyPanel records={commitmentAccuracy} activeSignal={activeSignal} />
+        <MicrostructurePanel orderBook={snapshot.orderBook} />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[1fr_0.85fr]">
@@ -507,13 +553,12 @@ export function GenesisDashboard() {
       ) : null}
 
       {visibleSections.genesisStatus ? (
-        <Panel title="Genesis-012.1 status">
+        <Panel title="Genesis-013 status">
           <ul className="list-disc space-y-2 pl-5 text-sm text-edge-muted">
-            <li>Trade Review outcome/reason buttons can now be unselected, and clearing a position clears the active review card.</li>
-            <li>Entry Gate Checklist explains why Edge15 is READY instead of ENTER.</li>
-            <li>Confidence Heat Strip, Contract Phase, Contradiction Alert, Do Not Chase, and Late Entry Warning added.</li>
-            <li>Trade Quality Filter lets you require A-only or B+/A setups before treating ENTER as allowed.</li>
-            <li>Position Mode now shows whether Edge15 would still enter the same side now.</li>
+            <li>Commitment Accuracy Tracker grades Edge15's locked contract predictions for the last 10 completed windows.</li>
+            <li>Market microstructure now uses Coinbase level-2 order book spread, depth, and imbalance as another professional-style data read.</li>
+            <li>Genesis-012.1 minute-9 commitment behavior remains intact.</li>
+            <li>Genesis-011 entry gates, filters, heat strip, and caution alerts remain intact.</li>
           </ul>
         </Panel>
       ) : null}
@@ -623,9 +668,100 @@ function RecentTrades({ entries, activeId, onSelect }: { entries: TradeJournalEn
 
 
 
+
+function CommitmentAccuracyPanel({ records, activeSignal }: { records: CommitmentAccuracyRecord[]; activeSignal: SignalPlan | null }) {
+  const resolved = records.filter((record) => record.correct !== null);
+  const correct = resolved.filter((record) => record.correct).length;
+  const accuracy = resolved.length ? Math.round((correct / resolved.length) * 100) : null;
+  const last = records.slice(0, 10);
+  return (
+    <Panel title="Commitment accuracy">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Metric label="Last 10" value={last.length ? `${correct}/${resolved.length}` : '—'} detail="Resolved commitments" help="This grades Edge15's locked minute-9 prediction, not later live recommendations." tone={accuracy === null ? 'neutral' : accuracy >= 60 ? 'good' : accuracy >= 50 ? 'warn' : 'bad'} />
+        <Metric label="Accuracy" value={accuracy === null ? '—' : `${accuracy}%`} detail="Won / resolved" help="No Trade and unresolved windows are not counted as wins or losses." tone={accuracy === null ? 'neutral' : accuracy >= 60 ? 'good' : accuracy >= 50 ? 'warn' : 'bad'} />
+        <Metric label="Current lock" value={activeSignal?.commitmentStatus === 'COMMITTED' ? activeSignal.committedDirection : activeSignal?.commitmentStatus === 'NO TRADE' ? 'NO TRADE' : 'SCOUTING'} detail="This contract" help="Edge15 records this automatically when the contract rolls into the next 15-minute window." tone={activeSignal?.commitmentStatus === 'COMMITTED' ? 'blue' : 'neutral'} />
+      </div>
+      <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+        {last.length ? last.map((record) => (
+          <div key={record.contractKey} title={commitmentRecordTitle(record)} className={`min-w-[64px] rounded-xl border px-3 py-2 text-center text-xs font-black ${record.correct === true ? 'border-edge-green/40 bg-edge-green/10 text-edge-green' : record.correct === false ? 'border-edge-red/40 bg-edge-red/10 text-edge-red' : 'border-edge-line bg-black/20 text-edge-muted'}`}>
+            <div>{record.correct === true ? '✅' : record.correct === false ? '❌' : '—'}</div>
+            <div className="mt-1">{highlightText(record.committedDirection)}</div>
+            <div className="mt-1 text-[10px] opacity-80">{record.outcome}</div>
+          </div>
+        )) : <div className="rounded-xl border border-edge-line bg-black/20 p-3 text-sm text-edge-muted">Waiting for completed committed contracts. This will fill automatically after the next window rolls.</div>}
+      </div>
+      <div className="mt-3 text-xs leading-5 text-edge-muted">Automatic tracker: Edge15 compares the committed plan to the completed 15-minute candle window. It is a model scorecard, not a guarantee of future results.</div>
+    </Panel>
+  );
+}
+
+function MicrostructurePanel({ orderBook }: { orderBook: MarketSnapshot['orderBook'] }) {
+  if (!orderBook) {
+    return <Panel title="Market microstructure"><div className="rounded-2xl border border-edge-line bg-black/20 p-4 text-sm leading-6 text-edge-muted">Order book data is unavailable on this refresh. Edge15 keeps the main price/candle feed running and treats microstructure as optional.</div></Panel>;
+  }
+  const pressureTone = orderBook.pressure === 'BUY' ? 'good' : orderBook.pressure === 'SELL' ? 'bad' : 'neutral';
+  const imbalancePct = orderBook.imbalance === null ? null : Math.round(orderBook.imbalance * 100);
+  return (
+    <Panel title="Market microstructure">
+      <div className="grid gap-3 sm:grid-cols-4">
+        <Metric label="Book Pressure" value={orderBook.pressure} detail={`${orderBook.levelsUsed} levels`} help="Uses top Coinbase level-2 bid and ask depth. BUY means bid depth is meaningfully stronger; SELL means ask depth is stronger." tone={pressureTone} />
+        <Metric label="Imbalance" value={imbalancePct === null ? '—' : `${imbalancePct >= 0 ? '+' : ''}${imbalancePct}%`} detail="Bid depth vs ask depth" help="Positive imbalance means more visible bid depth than ask depth. Negative means more visible ask depth than bid depth." tone={pressureTone} />
+        <Metric label="Spread" value={orderBook.spread === null ? '—' : `$${orderBook.spread.toFixed(2)}`} detail={orderBook.spreadBps === null ? 'bps unavailable' : `${orderBook.spreadBps.toFixed(2)} bps`} help="Tighter spreads usually mean cleaner execution and more reliable short-term reads." tone={orderBook.spreadBps !== null && orderBook.spreadBps > 2 ? 'warn' : 'blue'} />
+        <Metric label="Mid Price" value={formatPrice(orderBook.midPrice)} detail={orderBook.source} help="Midpoint between best bid and best ask." tone="blue" />
+      </div>
+      <div className="mt-3 text-xs leading-5 text-edge-muted">Common bot-style market data added: order book spread, depth, and imbalance. These are microstructure signals used alongside candles, not replacements for the commitment engine.</div>
+    </Panel>
+  );
+}
+
+function resolveCommitmentOutcome(plan: SignalPlan, candles: MarketSnapshot['candles']): CommitmentAccuracyRecord | null {
+  if (plan.commitmentStatus !== 'COMMITTED' && plan.commitmentStatus !== 'NO TRADE') return null;
+  const startIso = plan.contractKey.replace('15m:', '');
+  const startMs = Date.parse(startIso);
+  if (!Number.isFinite(startMs)) return null;
+  const endMs = startMs + 15 * 60 * 1000;
+  const windowCandles = candles.slice().sort((a, b) => a.time - b.time).filter((c) => c.time >= startMs && c.time < endMs);
+  if (windowCandles.length < 2) {
+    return {
+      contractKey: plan.contractKey,
+      committedDirection: plan.committedDirection,
+      outcome: 'UNKNOWN',
+      correct: null,
+      committedAt: plan.committedAt,
+      resolvedAt: new Date().toISOString(),
+      open: null,
+      close: null,
+      entryScore: null,
+      confidence: null,
+    };
+  }
+  const first = windowCandles[0];
+  const last = windowCandles[windowCandles.length - 1];
+  const change = last.close - first.open;
+  const outcome: CommitmentAccuracyRecord['outcome'] = Math.abs(change) < 0.01 ? 'FLAT' : change > 0 ? 'OVER' : 'UNDER';
+  const correct = plan.committedDirection === 'NONE' ? null : outcome === plan.committedDirection;
+  return {
+    contractKey: plan.contractKey,
+    committedDirection: plan.committedDirection,
+    outcome,
+    correct,
+    committedAt: plan.committedAt,
+    resolvedAt: new Date().toISOString(),
+    open: first.open,
+    close: last.close,
+    entryScore: null,
+    confidence: null,
+  };
+}
+
+function commitmentRecordTitle(record: CommitmentAccuracyRecord) {
+  const change = record.open !== null && record.close !== null ? `Open ${record.open.toFixed(2)} → Close ${record.close.toFixed(2)}` : 'No candle resolution yet';
+  return `${record.committedDirection} committed • outcome ${record.outcome} • ${record.correct === true ? 'correct' : record.correct === false ? 'incorrect' : 'not scored'} • ${change}`;
+}
+
 function CommitmentStatusCard({ signal, countdown }: { signal: SignalPlan; countdown: Countdown }) {
   const elapsedSeconds = Math.floor(countdown.elapsedMs / 1000);
-  const secondsToCommit = Math.max(0, 180 - elapsedSeconds);
+  const secondsToCommit = Math.max(0, 540 - elapsedSeconds);
   const toneClass = signal.commitmentStatus === 'COMMITTED'
     ? signal.committedDirection === 'OVER'
       ? 'border-edge-green/40 bg-edge-green/10 text-edge-green'

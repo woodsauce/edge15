@@ -1,21 +1,24 @@
-# Edge15 Genesis-012.1
+# Edge15 Genesis-013
 
-Edge15 is an AI-assisted decision support system for 15-minute Bitcoin prediction markets.
+Edge15 is an AI decision-support dashboard for 15-minute Bitcoin prediction-market analysis.
 
-## Genesis-012.1
+## Genesis-013 additions
 
-This release adds the **Commitment Engine**:
+- Commitment Accuracy Tracker: automatically tracks whether Edge15's locked committed plan was correct for the last 10 completed 15-minute periods.
+- Market Microstructure panel: adds Coinbase level-2 order book spread, midpoint, top-depth imbalance, and buy/sell pressure.
+- Health endpoint now reports Genesis-013.
 
-- Scout Mode for the first 9 minutes.
-- At minute 9, Edge15 commits to OVER, commits to UNDER, or declares NO TRADE.
-- The committed prediction stays fixed for the rest of the 15-minute window.
-- Management status can still warn HOLD / CAUTION / DANGER.
-- Entry Gate Checklist is now horizontal.
+## Run locally
 
-## Upload instructions
+```bash
+npm install
+npm run dev
+```
 
-Upload the contents of this folder to the root of `woodsauce/edge15` and commit:
+## Test
 
-```text
-Genesis-012.1: move commitment engine to minute 9
+```bash
+npm run typecheck
+npm test -- --run
+npm run build
 ```

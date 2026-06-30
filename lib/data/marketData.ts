@@ -1,5 +1,5 @@
-import type { Candle, FeedDiagnostic, FeedHealth, FifteenMinutePeriod, MarketSnapshot } from '@/lib/types/market';
-import { fetchCoinbaseCandles, fetchCoinbaseTicker } from '@/lib/data/coinbase';
+import type { Candle, FeedDiagnostic, FeedHealth, FifteenMinutePeriod, MarketSnapshot, OrderBookMetrics } from '@/lib/types/market';
+import { fetchCoinbaseCandles, fetchCoinbaseOrderBookMetrics, fetchCoinbaseTicker } from '@/lib/data/coinbase';
 import { fetchFallbackCandles, fetchFallbackTicker } from '@/lib/data/fallback';
 import { fetchKalshiBtc15m } from '@/lib/data/kalshi';
 
@@ -13,10 +13,18 @@ export async function getMarketSnapshot(): Promise<MarketSnapshot> {
   let btcPrice: number | null = null;
   let candles: MarketSnapshot['candles'] = [];
   let source = 'none';
+  let orderBook: OrderBookMetrics | null = null;
 
   const coinbaseResult = await timed('Coinbase', async () => {
-    const [price, coinbaseCandles] = await Promise.all([fetchCoinbaseTicker(), fetchCoinbaseCandles()]);
-    return { price, candles: coinbaseCandles };
+    const [price, coinbaseCandles, bookResult] = await Promise.allSettled([fetchCoinbaseTicker(), fetchCoinbaseCandles(), fetchCoinbaseOrderBookMetrics()]);
+    if (price.status === 'rejected') throw price.reason;
+    if (coinbaseCandles.status === 'rejected') throw coinbaseCandles.reason;
+    return {
+      price: price.value,
+      candles: coinbaseCandles.value,
+      orderBook: bookResult.status === 'fulfilled' ? bookResult.value : null,
+      orderBookError: bookResult.status === 'rejected' ? String(bookResult.reason instanceof Error ? bookResult.reason.message : bookResult.reason) : null,
+    };
   });
 
   diagnostics.coinbase = coinbaseResult.diagnostic;
@@ -25,6 +33,14 @@ export async function getMarketSnapshot(): Promise<MarketSnapshot> {
     btcPrice = coinbaseResult.value.price;
     candles = coinbaseResult.value.candles;
     source = 'Coinbase Exchange';
+    orderBook = coinbaseResult.value.orderBook;
+    if (!orderBook && coinbaseResult.value.orderBookError) {
+      diagnostics.coinbase = {
+        ...diagnostics.coinbase,
+        status: 'degraded',
+        message: `Coinbase price/candles OK; order book unavailable: ${coinbaseResult.value.orderBookError}`,
+      };
+    }
   } else {
     const fallbackResult = await timed('Binance.US fallback', async () => {
       const [price, fallbackCandles] = await Promise.all([fetchFallbackTicker(), fetchFallbackCandles()]);
@@ -67,6 +83,7 @@ export async function getMarketSnapshot(): Promise<MarketSnapshot> {
     strike: kalshi?.strike ?? null,
     candles,
     recentPeriods: buildRecentFifteenMinutePeriods(candles),
+    orderBook,
     kalshi,
     health: {
       coinbase: diagnostics.coinbase.status,

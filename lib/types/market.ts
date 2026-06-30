@@ -16,6 +16,20 @@ export type FeedDiagnostic = {
   updatedAt: string | null;
 };
 
+export type OrderBookMetrics = {
+  midPrice: number | null;
+  bestBid: number | null;
+  bestAsk: number | null;
+  spread: number | null;
+  spreadBps: number | null;
+  bidDepth: number | null;
+  askDepth: number | null;
+  imbalance: number | null;
+  pressure: 'BUY' | 'SELL' | 'NEUTRAL' | 'UNKNOWN';
+  levelsUsed: number;
+  source: string;
+};
+
 export type KalshiMarketContext = {
   ticker: string | null;
   title: string | null;
@@ -45,6 +59,7 @@ export type MarketSnapshot = {
   strike: number | null;
   candles: Candle[];
   recentPeriods: FifteenMinutePeriod[];
+  orderBook: OrderBookMetrics | null;
   kalshi: KalshiMarketContext | null;
   health: {
     coinbase: FeedHealth;
