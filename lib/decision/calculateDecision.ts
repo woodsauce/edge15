@@ -15,6 +15,13 @@ export function calculateDecision(snapshot: MarketSnapshot, countdown: Countdown
   const rsi = indicators.rsi14 ?? 50;
   const vwapDistance = price !== null && indicators.vwap !== null ? price - indicators.vwap : 0;
   const atr = indicators.atr14 ?? 35;
+  const orderBook = snapshot.orderBook;
+  const bookImbalance = orderBook?.imbalance ?? 0;
+  const bookPressureScore = orderBook?.pressure === 'BUY'
+    ? clamp(54 + Math.max(0, bookImbalance) * 42, 50, 76)
+    : orderBook?.pressure === 'SELL'
+      ? clamp(46 + Math.min(0, bookImbalance) * 42, 24, 50)
+      : 50;
 
   const trendScore = clamp(50 + emaSpread * 1.15, 0, 100);
   const momentumScore = clamp(50 + momentum5 * 1.15 + momentum15 * 0.25, 0, 100);
@@ -24,18 +31,23 @@ export function calculateDecision(snapshot: MarketSnapshot, countdown: Countdown
 
   // Early in the 15-minute window, structure and momentum matter more. Late in
   // the window, distance to the reference price becomes more important.
-  const settlementWeight = 0.16 + countdown.progress * 0.22;
-  const structureWeight = 0.32 - countdown.progress * 0.08;
-  const momentumWeight = 0.26 - countdown.progress * 0.04;
-  const vwapWeight = 0.16;
-  const rsiWeight = 1 - settlementWeight - structureWeight - momentumWeight - vwapWeight;
+  // Genesis-014: improve accuracy protection by weighting settlement reality more heavily
+  // as the contract matures. Candles can describe direction, but distance/time decide
+  // whether the 15-minute contract can actually finish on the predicted side.
+  const settlementWeight = 0.18 + countdown.progress * 0.34;
+  const structureWeight = 0.30 - countdown.progress * 0.11;
+  const momentumWeight = 0.24 - countdown.progress * 0.06;
+  const vwapWeight = 0.13;
+  const bookWeight = orderBook ? 0.08 : 0.03;
+  const rsiWeight = 1 - settlementWeight - structureWeight - momentumWeight - vwapWeight - bookWeight;
 
   const entryScore = Math.round(
     trendScore * structureWeight +
     momentumScore * momentumWeight +
     vwapScore * vwapWeight +
     rsiScore * rsiWeight +
-    distanceScore * settlementWeight,
+    distanceScore * settlementWeight +
+    bookPressureScore * bookWeight,
   );
 
   const directionalStrength = Math.abs(entryScore - 50);
@@ -43,20 +55,20 @@ export function calculateDecision(snapshot: MarketSnapshot, countdown: Countdown
   const stability = calculateStability(indicators, entryScore, distance);
   const guardrails = buildGuardrails(direction, distance, countdown, indicators, atr);
 
-  const rawConfidence = 45 + directionalStrength * 1.05 + stability * 0.18 - guardrails.confidencePenalty;
-  const confidenceCap = countdown.remainingMs <= 60_000 ? 84 : countdown.remainingMs <= 120_000 ? 88 : 92;
+  const rawConfidence = 40 + directionalStrength * 0.88 + stability * 0.15 - guardrails.confidencePenalty;
+  const confidenceCap = countdown.remainingMs <= 60_000 ? 76 : countdown.remainingMs <= 180_000 ? 82 : 88;
   const confidence = Math.round(clamp(rawConfidence, 0, confidenceCap));
 
-  const rawOpportunity = 25 + directionalStrength * 1.55 + stability * 0.22 - volatilityPenalty(indicators) - guardrails.opportunityPenalty;
+  const rawOpportunity = 20 + directionalStrength * 1.30 + stability * 0.18 - volatilityPenalty(indicators) - guardrails.opportunityPenalty;
   const opportunity = Math.round(clamp(rawOpportunity, 0, 100));
 
   let action: Decision['action'] = 'WAIT';
   if (guardrails.blockEnter) {
     action = guardrails.forceAvoid ? 'AVOID' : direction === 'NONE' ? 'WAIT' : `WATCH ${direction}` as Decision['action'];
-  } else if (direction === 'NONE') action = opportunity < 34 ? 'AVOID' : 'WAIT';
-  else if (opportunity >= 82 && confidence >= 78 && stability >= 62) action = `ENTER ${direction}` as Decision['action'];
-  else if (opportunity >= 68 && confidence >= 66) action = `LEAN ${direction}` as Decision['action'];
-  else if (opportunity >= 52 && confidence >= 56) action = `WATCH ${direction}` as Decision['action'];
+  } else if (direction === 'NONE') action = opportunity < 38 ? 'AVOID' : 'WAIT';
+  else if (opportunity >= 88 && confidence >= 78 && stability >= 70 && guardrails.settlement.risk !== 'High' && guardrails.settlement.risk !== 'Extreme') action = `ENTER ${direction}` as Decision['action'];
+  else if (opportunity >= 74 && confidence >= 66 && stability >= 58) action = `LEAN ${direction}` as Decision['action'];
+  else if (opportunity >= 56 && confidence >= 54) action = `WATCH ${direction}` as Decision['action'];
   else if (opportunity < 34) action = 'AVOID';
 
   const tone: Decision['tone'] = action.startsWith('ENTER') ? 'good' : action.startsWith('LEAN') || action.startsWith('WATCH') ? 'warn' : action === 'AVOID' ? 'bad' : 'neutral';
@@ -68,7 +80,7 @@ export function calculateDecision(snapshot: MarketSnapshot, countdown: Countdown
     entryScore,
     entryQuality: gradeEntry(entryScore, stability, opportunity),
     opportunity,
-    opportunityLabel: opportunity >= 82 ? 'Excellent' : opportunity >= 68 ? 'Good' : opportunity >= 52 ? 'Developing' : opportunity >= 34 ? 'Thin' : 'Poor',
+    opportunityLabel: opportunity >= 88 ? 'Excellent' : opportunity >= 74 ? 'Good' : opportunity >= 56 ? 'Developing' : opportunity >= 38 ? 'Thin' : 'Poor',
     tradeGrade: tradeGrade(opportunity, confidence, stability),
     confidence,
     stability,
@@ -106,21 +118,21 @@ function volatilityPenalty(indicators: IndicatorSnapshot) {
 
 function gradeEntry(entryScore: number, stability: number, opportunity: number) {
   const strength = Math.abs(entryScore - 50);
-  if (opportunity >= 84 && stability >= 72 && strength >= 28) return 'Excellent setup';
-  if (opportunity >= 68 && stability >= 58) return 'Good developing edge';
-  if (opportunity >= 52) return 'Watch for confirmation';
-  if (opportunity < 34) return 'Skip-quality market';
+  if (opportunity >= 88 && stability >= 76 && strength >= 30) return 'Excellent setup';
+  if (opportunity >= 74 && stability >= 64) return 'Good developing edge';
+  if (opportunity >= 56) return 'Watch for confirmation';
+  if (opportunity < 38) return 'Skip-quality market';
   return 'Not confirmed';
 }
 
 function tradeGrade(opportunity: number, confidence: number, stability: number) {
   const composite = opportunity * 0.42 + confidence * 0.34 + stability * 0.24;
-  if (composite >= 90) return 'A+';
-  if (composite >= 84) return 'A';
-  if (composite >= 78) return 'B+';
-  if (composite >= 70) return 'B';
-  if (composite >= 60) return 'C';
-  if (composite >= 48) return 'D';
+  if (composite >= 92) return 'A+';
+  if (composite >= 86) return 'A';
+  if (composite >= 80) return 'B+';
+  if (composite >= 72) return 'B';
+  if (composite >= 62) return 'C';
+  if (composite >= 50) return 'D';
   return 'F';
 }
 
@@ -181,13 +193,13 @@ function buildGuardrails(direction: Decision['direction'], distance: number | nu
   let confidencePenalty = 0;
   let opportunityPenalty = 0;
   const seconds = Math.ceil(countdown.remainingMs / 1000);
-  const cushion = Math.max(12, atr * 0.22);
+  const cushion = Math.max(18, atr * 0.34);
   const momentum5 = indicators.momentum5m ?? 0;
   const recentVelocityPerSecond = Math.abs(momentum5) / 300;
-  const volatilityAllowance = Math.max(6, atr * Math.sqrt(Math.max(seconds, 1) / 60) * 0.45);
-  const alignedVelocityAllowance = recentVelocityPerSecond * seconds * 1.15;
-  const unalignedVelocityAllowance = recentVelocityPerSecond * seconds * 0.25;
-  const mode: Decision['settlement']['mode'] = seconds <= 120 ? 'settlement' : 'normal';
+  const volatilityAllowance = Math.max(5, atr * Math.sqrt(Math.max(seconds, 1) / 60) * 0.38);
+  const alignedVelocityAllowance = recentVelocityPerSecond * seconds * 0.95;
+  const unalignedVelocityAllowance = recentVelocityPerSecond * seconds * 0.16;
+  const mode: Decision['settlement']['mode'] = seconds <= 360 ? 'settlement' : 'normal';
   let requiredMove: number | null = null;
   let realisticMove: number | null = null;
   let risk: Decision['settlement']['risk'] = 'Low';
@@ -203,27 +215,28 @@ function buildGuardrails(direction: Decision['direction'], distance: number | nu
     realisticMove = volatilityAllowance + (momentumAligned ? alignedVelocityAllowance : unalignedVelocityAllowance);
 
     const moveRatio = requiredMove <= 0 ? 0 : requiredMove / Math.max(realisticMove, 1);
-    const lateLabel = seconds <= 45 ? 'final seconds' : seconds <= 75 ? 'late window' : 'settlement window';
+    const lateLabel = seconds <= 45 ? 'final seconds' : seconds <= 120 ? 'late window' : 'commitment window';
 
     if (wrongSide) {
-      if (!momentumAligned || moveRatio > 1.25) {
+      if (!momentumAligned || moveRatio > 0.85) {
         blockEnter = true;
-        confidencePenalty += seconds <= 45 ? 34 : 25;
-        opportunityPenalty += seconds <= 45 ? 42 : 32;
+        confidencePenalty += seconds <= 45 ? 42 : seconds <= 120 ? 34 : 24;
+        opportunityPenalty += seconds <= 45 ? 52 : seconds <= 120 ? 42 : 28;
         risk = seconds <= 45 ? 'Extreme' : 'High';
         settlementMessage = `Settlement reality check: ${direction} needs about $${requiredMove.toFixed(0)} in ${seconds}s, but recent velocity/volatility only supports roughly $${realisticMove.toFixed(0)}. Late / risky / avoid.`;
         messages.push(settlementMessage);
-        if (seconds <= 30) forceAvoid = true;
+        if (seconds <= 90 || moveRatio > 1.25) forceAvoid = true;
       } else {
-        confidencePenalty += 10;
-        opportunityPenalty += 14;
+        blockEnter = seconds <= 120;
+        confidencePenalty += 18;
+        opportunityPenalty += 22;
         risk = 'High';
         settlementMessage = `Settlement reality check: BTC is on the wrong side for ${direction}, but recent velocity/volatility could cover about $${realisticMove.toFixed(0)} versus $${requiredMove.toFixed(0)} needed. Late reversal possible, but risky.`;
         messages.push(settlementMessage);
       }
     } else {
       if (requiredMove > 0 && moveRatio > 1.1) {
-        blockEnter = seconds <= 75;
+        blockEnter = seconds <= 180;
         confidencePenalty += 12;
         opportunityPenalty += 18;
         risk = 'Medium';
@@ -237,15 +250,35 @@ function buildGuardrails(direction: Decision['direction'], distance: number | nu
     }
   }
 
-  if (seconds <= 120 && direction !== 'NONE' && indicators.volatilityPct !== null && indicators.volatilityPct > 0.14) {
+  if (seconds <= 360 && direction !== 'NONE' && indicators.volatilityPct !== null && indicators.volatilityPct > 0.14) {
     confidencePenalty += 8;
     opportunityPenalty += 10;
     if (risk === 'Low') risk = 'Medium';
     messages.push('Late volatility is elevated, so Edge15 reduces confidence and avoids treating the setup like a lock.');
   }
 
+
+  if (direction !== 'NONE' && distance !== null && seconds <= 540) {
+    const correctSide = (direction === 'OVER' && distance > 0) || (direction === 'UNDER' && distance < 0);
+    const absDistance = Math.abs(distance);
+    if (!correctSide && seconds <= 540) {
+      blockEnter = true;
+      confidencePenalty += seconds <= 360 ? 18 : 10;
+      opportunityPenalty += seconds <= 360 ? 24 : 12;
+      if (risk === 'Low') risk = 'Medium';
+      messages.push(`${direction} is still on the wrong side of the reference during the commitment half of the window. Edge15 will not call a clean ENTER until price confirms the side.`);
+    }
+    if (correctSide && seconds <= 360 && absDistance < cushion * 0.75) {
+      blockEnter = true;
+      confidencePenalty += 10;
+      opportunityPenalty += 14;
+      if (risk === 'Low') risk = 'Medium';
+      messages.push(`${direction} is on the correct side, but cushion is too thin for a high-quality entry. Avoid paying for a fragile signal.`);
+    }
+  }
+
   return {
-    messages: messages.slice(0, 3),
+    messages: messages.slice(0, 4),
     blockEnter,
     forceAvoid,
     confidencePenalty,

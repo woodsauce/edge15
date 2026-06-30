@@ -362,7 +362,7 @@ export function GenesisDashboard() {
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-013</div>
+          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-014</div>
           <h1 className="text-3xl font-black tracking-tight">Edge15</h1>
         </div>
         <div className={`rounded-full border px-3 py-2 text-xs ${priceFeedLive ? 'border-edge-green/40 bg-edge-green/10 text-edge-green' : 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber'}`}>
@@ -423,13 +423,15 @@ export function GenesisDashboard() {
           </div>
 
 
-          <div className="mt-4 grid gap-3 xl:grid-cols-[0.9fr_1.1fr]">
+          <div className="mt-4 grid gap-3">
             <EntryGateChecklist gates={entryGates} activeSignal={activeSignal} decision={decision} qualityFilter={qualityFilter} onQualityFilter={chooseQualityFilter} />
-            <div className="grid gap-3">
+            <div className="grid gap-3 xl:grid-cols-[0.7fr_1.3fr]">
               <ConfidenceHeatStrip history={signalHistory} />
-              {lateWarning ? <AlertCard title="Late-entry warning" message={lateWarning} tone="warn" /> : null}
-              {contradiction ? <AlertCard title="Contradiction alert" message={contradiction} tone="bad" /> : null}
-              {doNotChase ? <AlertCard title="Do not chase" message={doNotChase} tone="warn" /> : null}
+              <div className="grid gap-3 lg:grid-cols-3">
+                {lateWarning ? <AlertCard title="Late-entry warning" message={lateWarning} tone="warn" /> : null}
+                {contradiction ? <AlertCard title="Contradiction alert" message={contradiction} tone="bad" /> : null}
+                {doNotChase ? <AlertCard title="Do not chase" message={doNotChase} tone="warn" /> : null}
+              </div>
             </div>
           </div>
 
@@ -553,7 +555,7 @@ export function GenesisDashboard() {
       ) : null}
 
       {visibleSections.genesisStatus ? (
-        <Panel title="Genesis-013 status">
+        <Panel title="Genesis-014 status">
           <ul className="list-disc space-y-2 pl-5 text-sm text-edge-muted">
             <li>Commitment Accuracy Tracker grades Edge15's locked contract predictions for the last 10 completed windows.</li>
             <li>Market microstructure now uses Coinbase level-2 order book spread, depth, and imbalance as another professional-style data read.</li>
@@ -856,9 +858,9 @@ function EntryGateChecklist({
           {gates.filter((gate) => gate.passed).length}/{gates.length} passed
         </div>
       </div>
-      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
         {gates.map((gate) => (
-          <div key={gate.label} className="flex min-h-[104px] items-start gap-3 rounded-xl border border-edge-line bg-slate-950/70 p-3 text-sm">
+          <div key={gate.label} className="flex min-h-[92px] items-start gap-2 rounded-xl border border-edge-line bg-slate-950/70 p-3 text-sm">
             <span className={gate.passed ? 'text-edge-green' : gate.severity === 'block' ? 'text-edge-red' : 'text-edge-amber'}>{gate.passed ? '✅' : gate.severity === 'block' ? '⛔' : '⚠️'}</span>
             <div>
               <div className="font-bold text-slate-100">{gate.label}</div>
@@ -891,19 +893,19 @@ function ConfidenceHeatStrip({ history }: { history: SignalHistoryPoint[] }) {
     return <AlertCard title="Confidence heat strip" message="Waiting for live updates to build the current-window signal history." tone="blue" />;
   }
   return (
-    <div className="rounded-2xl border border-edge-line bg-black/20 p-4">
+    <div className="rounded-2xl border border-edge-line bg-black/20 p-3">
       <div className="flex items-center justify-between gap-3">
         <div className="text-xs uppercase tracking-[0.22em] text-edge-muted">Confidence heat strip</div>
         <div className="text-xs text-edge-muted">last {history.length} updates</div>
       </div>
-      <div className="mt-3 flex gap-1 overflow-x-auto pb-1">
+      <div className="mt-2 flex gap-1 overflow-x-auto pb-1">
         {history.map((point, index) => (
-          <div key={`${point.label}-${index}`} title={`${point.label} • ${point.action} • confidence ${point.confidence}% • entry ${point.entryScore}`} className={`h-9 min-w-8 rounded-lg border ${point.direction === 'OVER' ? 'border-edge-green/40 bg-edge-green/20' : point.direction === 'UNDER' ? 'border-edge-red/40 bg-edge-red/20' : 'border-edge-line bg-slate-900'} flex items-center justify-center text-[10px] font-black`}>
+          <div key={`${point.label}-${index}`} title={`${point.label} • ${point.action} • confidence ${point.confidence}% • entry ${point.entryScore}`} className={`h-7 min-w-7 rounded-md border ${point.direction === 'OVER' ? 'border-edge-green/40 bg-edge-green/20' : point.direction === 'UNDER' ? 'border-edge-red/40 bg-edge-red/20' : 'border-edge-line bg-slate-900'} flex items-center justify-center text-[9px] font-black`}>
             {point.confidence}
           </div>
         ))}
       </div>
-      <div className="mt-2 text-xs leading-5 text-edge-muted">Green bars are OVER bias, red bars are UNDER bias. A smooth climb is healthier than a jumpy signal.</div>
+      <div className="mt-1 text-[11px] leading-4 text-edge-muted">Green = OVER, red = UNDER. Smooth is healthier than jumpy.</div>
     </div>
   );
 }
@@ -944,18 +946,18 @@ function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, co
     },
     {
       label: 'Entry Score',
-      passed: decision.entryScore >= 65,
-      detail: `${decision.entryScore}/100. ${decision.entryScore >= 65 ? 'Timing is strong enough to consider entry.' : 'Timing is not strong enough yet.'}`,
+      passed: decision.entryScore >= 72,
+      detail: `${decision.entryScore}/100. ${decision.entryScore >= 72 ? 'Timing is strong enough to consider entry.' : 'Timing is not strong enough yet.'}`,
     },
     {
       label: 'Signal Stability',
-      passed: stability >= 60,
-      detail: `${stability}%. ${stability >= 60 ? 'The plan is stable enough to matter.' : 'The plan is still too jumpy.'}`,
+      passed: stability >= 68,
+      detail: `${stability}%. ${stability >= 68 ? 'The plan is stable enough to matter.' : 'The plan is still too jumpy.'}`,
     },
     {
       label: 'Confirmation count',
-      passed: confirmations >= 2,
-      detail: `${confirmations}/2 confirmations. ${confirmations >= 2 ? 'The signal has survived multiple refreshes.' : 'Needs more confirming updates.'}`,
+      passed: confirmations >= 3,
+      detail: `${confirmations}/3 confirmations. ${confirmations >= 3 ? 'The signal has survived multiple refreshes.' : 'Needs more confirming updates.'}`,
     },
     {
       label: 'Price / strike reality',
@@ -965,8 +967,8 @@ function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, co
     },
     {
       label: 'Settlement risk',
-      passed: decision.settlement.risk === 'Low' || decision.settlement.risk === 'Medium',
-      detail: `${decision.settlement.risk}. ${decision.settlement.message}`,
+      passed: decision.settlement.risk === 'Low',
+      detail: `${decision.settlement.risk}. Clean ENTER needs Low settlement risk in Genesis-014. ${decision.settlement.message}`,
       severity: decision.settlement.risk === 'Extreme' || decision.settlement.risk === 'High' ? 'block' : 'warn',
     },
     {
@@ -978,8 +980,8 @@ function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, co
 }
 
 function buildLateEntryWarning(decision: Decision, countdown: Countdown) {
-  if (countdown.remainingMs > 90000) return null;
-  if (decision.settlement.risk === 'Low' && decision.entryScore >= 75) return null;
+  if (countdown.remainingMs > 360000) return null;
+  if (decision.settlement.risk === 'Low' && decision.entryScore >= 82) return null;
   const required = decision.settlement.requiredMove === null ? 'unknown' : `$${decision.settlement.requiredMove.toFixed(0)}`;
   const realistic = decision.settlement.realisticMove === null ? 'unknown' : `$${decision.settlement.realisticMove.toFixed(0)}`;
   return `Only ${countdown.display} remains. Required move is ${required}; realistic short-window move is about ${realistic}. Late entries need extra caution.`;
@@ -1009,7 +1011,7 @@ function buildDoNotChaseWarning(decision: Decision, activeSignal: SignalPlan | n
   if ((extendedUnder || extendedOver) && decision.entryScore < 74) {
     return `${direction} may be directionally right, but the move already looks extended. Do not chase unless timing improves.`;
   }
-  if (countdown.remainingMs <= 60000 && decision.entryScore < 70) {
+  if (countdown.remainingMs <= 180000 && decision.entryScore < 78) {
     return `The window is nearly over and Entry Score is only ${decision.entryScore}/100. Avoid chasing a late signal.`;
   }
   return null;

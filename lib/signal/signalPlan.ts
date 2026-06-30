@@ -169,7 +169,14 @@ function maybeCommit(plan: SignalPlan, decision: Decision, countdown: SignalPlan
     }, decision, countdown);
   }
 
-  if (plan.direction === 'NONE' || decision.opportunity < 50 || decision.confidence < 52 || decision.settlement.risk === 'Extreme') {
+  const wrongSideAtCommitment = plan.direction === 'OVER'
+    ? decision.distanceToReference !== null && decision.distanceToReference < 0
+    : plan.direction === 'UNDER'
+      ? decision.distanceToReference !== null && decision.distanceToReference > 0
+      : false;
+  const commitmentTooWeak = decision.opportunity < 62 || decision.confidence < 58 || decision.stability < 58 || decision.entryScore > 44 && decision.entryScore < 56;
+
+  if (plan.direction === 'NONE' || commitmentTooWeak || decision.settlement.risk === 'High' || decision.settlement.risk === 'Extreme' || wrongSideAtCommitment) {
     return withNarrative({
       ...plan,
       direction: 'NONE',
@@ -179,7 +186,7 @@ function maybeCommit(plan: SignalPlan, decision: Decision, countdown: SignalPlan
       commitmentStatus: 'NO TRADE',
       committedDirection: 'NONE',
       committedAt: nowIso,
-      commitmentReason: `Minute-9 commitment check did not find a clean edge. Edge15 is intentionally sitting this contract out instead of flipping later.`,
+      commitmentReason: `Minute-9 commitment check did not find a clean, protected edge. Edge15 is intentionally sitting this contract out instead of forcing a side.`,
     }, decision, countdown);
   }
 
@@ -242,11 +249,11 @@ function statusFromDecision(decision: Decision): SignalStatus {
 function stabilizeStatus(previousStatus: SignalStatus, rawStatus: SignalStatus, confirmations: number, decision: Decision): SignalStatus {
   if (rawStatus === 'NO PLAN') return previousStatus === 'ENTER' || previousStatus === 'READY' ? 'HOLD SIGNAL' : 'BUILDING';
   if (rawStatus === 'ENTER') {
-    if (confirmations >= 6 && decision.stability >= 62 && decision.opportunity >= 76) return 'ENTER';
-    if (confirmations >= 4) return 'READY';
+    if (confirmations >= 7 && decision.stability >= 70 && decision.opportunity >= 88 && decision.settlement.risk !== 'High' && decision.settlement.risk !== 'Extreme') return 'ENTER';
+    if (confirmations >= 5 && decision.stability >= 62 && decision.opportunity >= 74) return 'READY';
     return previousStatus === 'ENTER' ? 'HOLD SIGNAL' : 'LEAN';
   }
-  if (rawStatus === 'LEAN') return confirmations >= 4 ? 'READY' : 'LEAN';
+  if (rawStatus === 'LEAN') return confirmations >= 5 && decision.opportunity >= 74 ? 'READY' : 'LEAN';
   if (rawStatus === 'WATCH') return confirmations >= 3 ? 'LEAN' : 'WATCH';
   if (rawStatus === 'BUILDING') return previousStatus === 'ENTER' || previousStatus === 'READY' ? 'HOLD SIGNAL' : 'BUILDING';
   return rawStatus;
@@ -320,8 +327,8 @@ function buildNextStep(plan: SignalPlan, decision: Decision, display: string) {
   if (plan.commitmentStatus === 'NO TRADE') return `No Trade was committed at minute 9. Edge15 will continue showing risk context, but it will not chase a late prediction for this contract.`;
   if (plan.commitmentStatus === 'COMMITTED') return `Committed ${plan.committedDirection}. If you enter, press Entered ${plan.committedDirection}; otherwise use HOLD/CAUTION/DANGER as management context, not a new side flip.`;
   if (plan.status === 'ENTER') return `Entry plan is confirmed with ${display} remaining. If you enter, press Entered ${plan.direction} so Edge15 switches into HOLD / CAUTION / DANGER mode.`;
-  if (plan.status === 'READY') return `Wait for the signal to hold one more update or for Entry Score to stay strong above ${Math.max(76, decision.entryScore)}.`;
-  if (plan.status === 'LEAN') return 'Plan is improving. Look for stability to rise above 68% and opportunity to remain above 76%.';
+  if (plan.status === 'READY') return `Wait for the signal to hold one more update, remain on the correct side of the strike, and keep opportunity above 88%.`;
+  if (plan.status === 'LEAN') return 'Plan is improving. Look for stability to rise above 70%, opportunity above 88%, and settlement risk to remain below High.';
   if (plan.status === 'WATCH' || plan.status === 'BUILDING') return 'Let the plan build. Edge15 needs more agreement before showing ENTER.';
   if (plan.status === 'CAUTION') return 'Do not add. Wait to see if the original plan recovers or cancels.';
   if (plan.status === 'HOLD SIGNAL') return 'Original signal is weakening but not invalidated. Avoid chasing a fresh entry until it strengthens again.';
