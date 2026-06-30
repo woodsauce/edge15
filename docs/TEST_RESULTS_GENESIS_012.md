@@ -8,5 +8,5 @@ Executed in build workspace:
 
 Notes:
 
-- Signal plan tests were updated for the minute-3 Commitment Engine.
+- Signal plan tests were updated for the minute-9 Commitment Engine.
 - Build completed without TypeScript or ESLint errors.
