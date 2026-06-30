@@ -33,6 +33,7 @@ const snapshot: MarketSnapshot = {
   btcPrice: 60030,
   strike: 59980,
   candles: [],
+  recentPeriods: [],
   kalshi: null,
   health: { coinbase: 'ok', fallback: 'unknown', kalshi: 'ok' },
   diagnostics: {
@@ -54,6 +55,10 @@ const decision: Decision = {
   tradeGrade: 'A',
   confidence: 80,
   stability: 72,
+  distanceToReference: 50,
+  secondsRemaining: 600,
+  guardrails: [],
+  settlement: { mode: 'normal', requiredMove: null, realisticMove: null, risk: 'Low', message: 'normal' },
   reason: 'test',
   whyNot: [],
   story: 'test',

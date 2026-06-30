@@ -24,6 +24,7 @@ const DEFAULT_SNAPSHOT: MarketSnapshot = {
   btcPrice: null,
   strike: null,
   candles: [],
+  recentPeriods: [],
   kalshi: null,
   health: { coinbase: 'unknown', kalshi: 'unknown', fallback: 'unknown' },
   diagnostics: {
@@ -35,6 +36,7 @@ const DEFAULT_SNAPSHOT: MarketSnapshot = {
 };
 
 const SECTION_STORAGE_KEY = 'edge15.visibleSections.v1';
+const ENGINE_AVERAGE_STORAGE_KEY = 'edge15.engineAverages.v1';
 const DEFAULT_VISIBLE_SECTIONS = {
   aiDesk: true,
   marketStory: true,
@@ -53,6 +55,9 @@ type ApiTest = {
   kalshi?: string;
 };
 
+type EngineAverage = { average: number; samples: number };
+type EngineAverages = Record<string, EngineAverage>;
+
 export function GenesisDashboard() {
   const [snapshot, setSnapshot] = useState<MarketSnapshot>(DEFAULT_SNAPSHOT);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +67,7 @@ export function GenesisDashboard() {
   const [position, setPosition] = useState<LockedPosition | null>(null);
   const [signalPlan, setSignalPlan] = useState<SignalPlan | null>(null);
   const [visibleSections, setVisibleSections] = useState(DEFAULT_VISIBLE_SECTIONS);
+  const [engineAverages, setEngineAverages] = useState<EngineAverages>({});
 
   useEffect(() => {
     const saved = window.localStorage.getItem(SECTION_STORAGE_KEY);
@@ -70,6 +76,16 @@ export function GenesisDashboard() {
       setVisibleSections({ ...DEFAULT_VISIBLE_SECTIONS, ...JSON.parse(saved) });
     } catch {
       window.localStorage.removeItem(SECTION_STORAGE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(ENGINE_AVERAGE_STORAGE_KEY);
+    if (!saved) return;
+    try {
+      setEngineAverages(JSON.parse(saved) as EngineAverages);
+    } catch {
+      window.localStorage.removeItem(ENGINE_AVERAGE_STORAGE_KEY);
     }
   }, []);
 
@@ -152,6 +168,24 @@ export function GenesisDashboard() {
   const tradingDesk = useMemo(() => buildTradingDesk(snapshot, decision, signalPlan, countdown), [snapshot, decision, signalPlan, countdown]);
   const priceFeedLive = snapshot.btcPrice !== null && snapshot.candles.length >= 10;
 
+  useEffect(() => {
+    if (!snapshot.fetchedAt || !tradingDesk.engines.length) return;
+    setEngineAverages((previous) => {
+      const next: EngineAverages = { ...previous };
+      for (const engine of tradingDesk.engines) {
+        const current = next[engine.id] ?? { average: engine.confidence, samples: 0 };
+        const samples = Math.min(current.samples + 1, 300);
+        const weight = current.samples >= 300 ? 1 / 300 : 1 / samples;
+        next[engine.id] = {
+          samples,
+          average: Math.round((current.average * (1 - weight) + engine.confidence * weight) * 10) / 10,
+        };
+      }
+      window.localStorage.setItem(ENGINE_AVERAGE_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, [snapshot.fetchedAt]);
+
   const latestDecisionRef = useRef(decision);
   const latestCountdownRef = useRef(countdown);
   const latestNowRef = useRef(now);
@@ -193,7 +227,7 @@ export function GenesisDashboard() {
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-4 px-4 py-5 sm:px-6">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-007</div>
+          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-008</div>
           <h1 className="text-3xl font-black tracking-tight">Edge15</h1>
         </div>
         <div className={`rounded-full border px-3 py-2 text-xs ${priceFeedLive ? 'border-edge-green/40 bg-edge-green/10 text-edge-green' : 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber'}`}>
@@ -205,6 +239,26 @@ export function GenesisDashboard() {
         <div className="text-sm uppercase tracking-[0.22em] text-edge-muted">Time remaining</div>
         <div className="mt-1 text-6xl font-black tracking-tighter sm:text-7xl">{countdown.display}</div>
         <div className="mt-2 text-sm text-edge-muted">Current 15-minute window • live data refreshes every 3 seconds</div>
+      </Panel>
+
+      <Panel title="Last 10 completed 15-minute periods">
+        {snapshot.recentPeriods.length ? (
+          <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">
+            {snapshot.recentPeriods.map((period, index) => (
+              <div
+                key={`${period.startTime}-${index}`}
+                className={`rounded-2xl border px-2 py-3 text-center ${period.direction === 'UP' ? 'border-edge-green/40 bg-edge-green/10' : period.direction === 'DOWN' ? 'border-edge-red/40 bg-edge-red/10' : 'border-edge-line bg-black/20'}`}
+              >
+                <div className="text-[10px] uppercase tracking-[0.16em] text-edge-muted">{formatPeriodTime(period.startTime)}</div>
+                <div className={`mt-1 text-lg font-black ${period.direction === 'UP' ? 'text-edge-green' : period.direction === 'DOWN' ? 'text-edge-red' : 'text-white'}`}>{period.direction}</div>
+                <div className="mt-1 text-[11px] text-slate-400">{period.change >= 0 ? '+' : ''}${period.change.toFixed(0)}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-edge-line bg-black/20 p-4 text-sm text-edge-muted">Waiting for enough candle history to summarize the last completed 15-minute periods.</div>
+        )}
+        <div className="mt-3 text-xs text-edge-muted">Green means the completed 15-minute period closed above where it opened. Red means it closed below where it opened. This is context only; it is not a trade signal by itself.</div>
       </Panel>
 
       <Panel title="Workspace controls">
@@ -265,6 +319,13 @@ export function GenesisDashboard() {
             help={signalStabilityHelp(activeSignal?.stability ?? decision.stability)}
             tone={(activeSignal?.stability ?? decision.stability) > 70 ? 'good' : (activeSignal?.stability ?? decision.stability) > 55 ? 'warn' : 'bad'}
           />
+          <Metric
+            label="Settlement Risk"
+            value={decision.settlement.risk}
+            detail={decision.settlement.mode === 'settlement' ? 'Final 2m reality check' : 'Normal mode'}
+            help={decision.settlement.message}
+            tone={decision.settlement.risk === 'Low' ? 'good' : decision.settlement.risk === 'Medium' ? 'warn' : 'bad'}
+          />
         </div>
         {position ? (
           <div className="mt-4 rounded-xl border border-edge-blue/30 bg-edge-blue/10 px-3 py-3 text-xs text-edge-muted">
@@ -302,7 +363,7 @@ export function GenesisDashboard() {
             {tradingDesk.chiefSummary}
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {tradingDesk.engines.map((engine) => <EngineCard key={engine.id} engine={engine} />)}
+            {tradingDesk.engines.map((engine) => <EngineCard key={engine.id} engine={engine} average={engineAverages[engine.id]} />)}
           </div>
           <div className="mt-4 rounded-2xl border border-edge-line bg-black/20 p-4">
             <div className="text-xs uppercase tracking-[0.18em] text-edge-muted">AI Debate</div>
@@ -380,13 +441,14 @@ export function GenesisDashboard() {
       </div>
 
       {visibleSections.genesisStatus ? (
-        <Panel title="Genesis-007 status">
+        <Panel title="Genesis-008 status">
           <ul className="list-disc space-y-2 pl-5 text-sm text-edge-muted">
-            <li>Entry-mode boxes now include short plain-English explanations for phone use.</li>
-            <li>Entry Score, Opportunity, Trade Grade, Model Trust, and Signal Stability explain what their values mean.</li>
-            <li>Trade Plan context now remains visible after you tap Entered OVER or Entered UNDER.</li>
-            <li>Locked Position Mode adds HOLD / CAUTION / DANGER without hiding the original trade context.</li>
-            <li>Genesis-006 AI Trading Desk, Genesis-005 trade-plan stability, and Genesis-004 locked position mode remain intact.</li>
+            <li>Settlement Reality Check now weighs time remaining, distance, velocity, and volatility before allowing late entries.</li>
+            <li>Confidence is capped and late wrong-side entries are downgraded unless the required move is realistic.</li>
+            <li>OVER words display in green and UNDER words display in red across trade-plan context.</li>
+            <li>Engine cards now compare current confidence against the rolling average seen in this browser.</li>
+            <li>The top of the dashboard now shows the last 10 completed 15-minute periods as UP/DOWN context.</li>
+            <li>Genesis-007 helper descriptions, Genesis-006 AI Trading Desk, Genesis-005 stability, and Genesis-004 position mode remain intact.</li>
           </ul>
         </Panel>
       ) : null}
@@ -394,7 +456,11 @@ export function GenesisDashboard() {
   );
 }
 
-function EngineCard({ engine }: { engine: EngineVote }) {
+function EngineCard({ engine, average }: { engine: EngineVote; average?: EngineAverage }) {
+  const avg = average?.average ?? engine.confidence;
+  const delta = Math.round((engine.confidence - avg) * 10) / 10;
+  const deltaText = `${delta >= 0 ? '+' : ''}${delta.toFixed(1)} vs avg`;
+  const avgSamples = average?.samples ?? 1;
   return (
     <div className="rounded-2xl border border-edge-line bg-black/18 p-4">
       <div className="flex items-start justify-between gap-3">
@@ -402,9 +468,21 @@ function EngineCard({ engine }: { engine: EngineVote }) {
           <div className="text-sm font-black text-white">{engine.name}</div>
           <div className="mt-1 text-xs text-edge-muted">{engine.role}</div>
         </div>
-        <div className={`rounded-full border px-2 py-1 text-xs font-black ${badgeClass(engine.tone)}`}>{engine.bias}</div>
+        <div className={`rounded-full border px-2 py-1 text-xs font-black ${biasBadgeClass(engine.bias, engine.tone)}`}>{engine.bias}</div>
       </div>
-      <div className="mt-3 text-2xl font-black">{engine.confidence}%</div>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-edge-muted">Current</div>
+          <div className="text-2xl font-black">{engine.confidence}%</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-edge-muted">Rolling avg</div>
+          <div className="text-2xl font-black text-edge-blue">{avg.toFixed(1)}%</div>
+        </div>
+      </div>
+      <div className={`mt-2 rounded-xl border px-2 py-1 text-xs font-bold ${delta >= 8 ? 'border-edge-green/30 bg-edge-green/10 text-edge-green' : delta <= -8 ? 'border-edge-red/30 bg-edge-red/10 text-edge-red' : 'border-edge-line bg-black/20 text-edge-muted'}`}>
+        {deltaText} • {avgSamples} sample{avgSamples === 1 ? '' : 's'} in this browser
+      </div>
       <div className="mt-2 text-sm leading-6 text-slate-200">{engine.message}</div>
     </div>
   );
@@ -446,6 +524,10 @@ function buildFriendlyError(data: Partial<MarketSnapshot> & { error?: string }) 
   const fallback = data?.diagnostics?.fallback?.message;
   if (coinbase || fallback) return `Price feed unavailable. Coinbase: ${coinbase ?? 'not checked'} Fallback: ${fallback ?? 'not checked'}`;
   return data?.error ?? 'Market data request failed';
+}
+
+function formatPeriodTime(ms: number) {
+  return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
 function formatPrice(value: number | null) {
@@ -495,6 +577,12 @@ function badgeClass(tone: 'neutral' | 'good' | 'warn' | 'bad' | 'blue') {
   if (tone === 'warn') return 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber';
   if (tone === 'blue') return 'border-edge-blue/40 bg-edge-blue/10 text-edge-blue';
   return 'border-edge-line bg-black/20 text-edge-muted';
+}
+
+function biasBadgeClass(bias: EngineVote['bias'], tone: 'neutral' | 'good' | 'warn' | 'bad' | 'blue') {
+  if (bias === 'OVER') return 'border-edge-green/40 bg-edge-green/10 text-edge-green';
+  if (bias === 'UNDER') return 'border-edge-red/40 bg-edge-red/10 text-edge-red';
+  return badgeClass(tone);
 }
 
 

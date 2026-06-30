@@ -1,4 +1,4 @@
-import type { FeedDiagnostic, FeedHealth, MarketSnapshot } from '@/lib/types/market';
+import type { Candle, FeedDiagnostic, FeedHealth, FifteenMinutePeriod, MarketSnapshot } from '@/lib/types/market';
 import { fetchCoinbaseCandles, fetchCoinbaseTicker } from '@/lib/data/coinbase';
 import { fetchFallbackCandles, fetchFallbackTicker } from '@/lib/data/fallback';
 import { fetchKalshiBtc15m } from '@/lib/data/kalshi';
@@ -66,6 +66,7 @@ export async function getMarketSnapshot(): Promise<MarketSnapshot> {
     btcPrice,
     strike: kalshi?.strike ?? null,
     candles,
+    recentPeriods: buildRecentFifteenMinutePeriods(candles),
     kalshi,
     health: {
       coinbase: diagnostics.coinbase.status,
@@ -88,6 +89,35 @@ export async function getHealthReport() {
   };
 }
 
+
+
+function buildRecentFifteenMinutePeriods(candles: Candle[]): FifteenMinutePeriod[] {
+  if (candles.length < 15) return [];
+  const sorted = candles.slice().sort((a, b) => a.time - b.time);
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000;
+  const currentWindowStart = Math.floor(now / windowMs) * windowMs;
+  const periods: FifteenMinutePeriod[] = [];
+
+  for (let start = currentWindowStart - windowMs; periods.length < 10 && start >= sorted[0].time - windowMs; start -= windowMs) {
+    const end = start + windowMs;
+    const windowCandles = sorted.filter((c) => c.time >= start && c.time < end);
+    if (windowCandles.length < 2) continue;
+    const first = windowCandles[0];
+    const last = windowCandles[windowCandles.length - 1];
+    const change = last.close - first.open;
+    periods.push({
+      startTime: start,
+      endTime: end,
+      open: first.open,
+      close: last.close,
+      change,
+      direction: Math.abs(change) < 0.01 ? 'FLAT' : change > 0 ? 'UP' : 'DOWN',
+    });
+  }
+
+  return periods;
+}
 
 function deriveReferenceStrikeFromCandles(closeTime: string | null, candles: MarketSnapshot['candles']): number | null {
   if (!closeTime || candles.length === 0) return null;

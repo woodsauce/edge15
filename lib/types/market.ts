@@ -30,11 +30,21 @@ export type KalshiMarketContext = {
   oddsSource?: string | null;
 };
 
+export type FifteenMinutePeriod = {
+  startTime: number;
+  endTime: number;
+  open: number;
+  close: number;
+  change: number;
+  direction: 'UP' | 'DOWN' | 'FLAT';
+};
+
 export type MarketSnapshot = {
   source: string;
   btcPrice: number | null;
   strike: number | null;
   candles: Candle[];
+  recentPeriods: FifteenMinutePeriod[];
   kalshi: KalshiMarketContext | null;
   health: {
     coinbase: FeedHealth;

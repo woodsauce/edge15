@@ -1,20 +1,22 @@
-# Edge15 Genesis-007
+# Edge15 Genesis-008
 
-Genesis-007 is a clarity and usability upgrade for the working Edge15 Genesis line.
+Genesis-008 is a safety correction and market-context upgrade for the working Edge15 Genesis line.
 
 ## Commit message
 
 ```text
-Genesis-007: add entry helpers and persistent trade context
+Genesis-008: add settlement guardrails and 15m context
 ```
 
 ## What's new
 
-- Entry-mode boxes now include short descriptions directly inside the cards.
-- Entry Score, Opportunity, Trade Grade, Model Trust, and Signal Stability explain what they mean.
-- Trade Plan context stays visible after pressing Entered OVER or Entered UNDER.
-- Locked Position Mode now adds HOLD / CAUTION / DANGER below the trade context instead of replacing it.
-- Genesis-006 AI Trading Desk, Genesis-005 signal stability, and Genesis-004 position mode remain intact.
+- Settlement Reality Check stops bad late entries when price/time/distance do not support the side.
+- Late signals are labeled through risk instead of using a blind final-minute lockout.
+- Confidence is capped so Edge15 does not imply certainty.
+- OVER wording is highlighted green and UNDER wording red across trade-plan context.
+- Engine cards show current confidence versus a rolling in-browser average.
+- Top dashboard now shows the last 10 completed 15-minute periods as UP/DOWN context.
+- Genesis-007 helper descriptions and persistent trade context remain intact.
 
 ## Upload instructions
 
@@ -24,7 +26,9 @@ Do not upload the outer folder or ZIP.
 
 After Vercel deploys, verify:
 
-- Header says Genesis-007.
-- Main metric boxes show descriptions.
-- Pressing Entered OVER/UNDER keeps Trade Plan, Entry Score, Opportunity, Trade Grade, Model Trust, and Signal Stability visible.
-- Locked Position Mode appears below the trade context.
+- Header says Genesis-008.
+- Last 10 completed 15-minute periods show near the top.
+- Settlement Risk shows normal/settlement mode and a late-entry risk message.
+- Engine cards show Current vs Rolling avg.
+- OVER words appear green and UNDER words red in trade-plan context.
+- Pressing Entered OVER/UNDER keeps the trade context visible and adds Locked Position Mode below it.

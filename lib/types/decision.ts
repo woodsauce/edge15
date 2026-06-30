@@ -14,6 +14,16 @@ export type Decision = {
   tradeGrade: string;
   confidence: number;
   stability: number;
+  distanceToReference: number | null;
+  secondsRemaining: number;
+  guardrails: string[];
+  settlement: {
+    mode: 'normal' | 'settlement';
+    requiredMove: number | null;
+    realisticMove: number | null;
+    risk: 'Low' | 'Medium' | 'High' | 'Extreme';
+    message: string;
+  };
   reason: string;
   whyNot: string[];
   story: string;

@@ -1,7 +1,7 @@
 import type { Candle } from '@/lib/types/market';
 
 const BINANCE_US_TICKER = 'https://api.binance.us/api/v3/ticker/price?symbol=BTCUSD';
-const BINANCE_US_KLINES = 'https://api.binance.us/api/v3/klines?symbol=BTCUSD&interval=1m&limit=75';
+const BINANCE_US_KLINES = 'https://api.binance.us/api/v3/klines?symbol=BTCUSD&interval=1m&limit=180';
 const TIMEOUT_MS = 6500;
 
 export async function fetchFallbackTicker(): Promise<number> {

@@ -15,7 +15,7 @@ export async function fetchCoinbaseTicker(): Promise<number> {
 
 export async function fetchCoinbaseCandles(): Promise<Candle[]> {
   const end = new Date();
-  const start = new Date(end.getTime() - 75 * 60 * 1000);
+  const start = new Date(end.getTime() - 180 * 60 * 1000);
   const url = new URL(COINBASE_CANDLES_URL);
   url.searchParams.set('granularity', '60');
   url.searchParams.set('start', start.toISOString());
