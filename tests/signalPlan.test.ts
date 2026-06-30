@@ -3,13 +3,22 @@ import { updateSignalPlan } from '@/lib/signal/signalPlan';
 import type { Decision } from '@/lib/types/decision';
 import type { Countdown } from '@/lib/position/countdown';
 
-const countdown: Countdown = {
+const countdownAfterCommit: Countdown = {
   windowStart: new Date('2026-06-29T07:45:00Z'),
   windowEnd: new Date('2026-06-29T08:00:00Z'),
   remainingMs: 9 * 60 * 1000,
   elapsedMs: 6 * 60 * 1000,
   display: '9:00',
   progress: 0.4,
+};
+
+const scoutCountdown: Countdown = {
+  windowStart: new Date('2026-06-29T07:45:00Z'),
+  windowEnd: new Date('2026-06-29T08:00:00Z'),
+  remainingMs: 13 * 60 * 1000,
+  elapsedMs: 2 * 60 * 1000,
+  display: '13:00',
+  progress: 0.13,
 };
 
 function decision(action: Decision['action'], direction: Decision['direction'], confidence = 82, opportunity = 84): Decision {
@@ -48,21 +57,33 @@ function decision(action: Decision['action'], direction: Decision['direction'], 
 }
 
 describe('signal plan', () => {
-  it('does not promote raw ENTER to ENTER on the first update', () => {
-    const plan = updateSignalPlan({ previous: null, decision: decision('ENTER OVER', 'OVER'), countdown, now: new Date('2026-06-29T07:51:00Z') });
+  it('stays in scout mode before minute 3', () => {
+    const plan = updateSignalPlan({ previous: null, decision: decision('ENTER OVER', 'OVER'), countdown: scoutCountdown, now: new Date('2026-06-29T07:47:00Z') });
+    expect(plan.commitmentStatus).toBe('SCOUTING');
+    expect(plan.committedDirection).toBe('NONE');
     expect(plan.displayAction).toBe('READY OVER');
   });
 
-  it('requires repeated confirmation before ENTER', () => {
-    let plan = updateSignalPlan({ previous: null, decision: decision('ENTER OVER', 'OVER'), countdown, now: new Date('2026-06-29T07:51:00Z') });
-    plan = updateSignalPlan({ previous: plan, decision: decision('ENTER OVER', 'OVER'), countdown, now: new Date('2026-06-29T07:51:03Z') });
-    expect(['READY OVER', 'ENTER OVER']).toContain(plan.displayAction);
+  it('commits after minute 3 when a clean edge exists', () => {
+    const plan = updateSignalPlan({ previous: null, decision: decision('ENTER OVER', 'OVER'), countdown: countdownAfterCommit, now: new Date('2026-06-29T07:51:00Z') });
+    expect(plan.commitmentStatus).toBe('COMMITTED');
+    expect(plan.committedDirection).toBe('OVER');
+    expect(plan.displayAction).toBe('COMMITTED OVER');
   });
 
-  it('does not instantly flip directions on one opposite read', () => {
-    const first = updateSignalPlan({ previous: null, decision: decision('ENTER OVER', 'OVER'), countdown, now: new Date('2026-06-29T07:51:00Z') });
-    const next = updateSignalPlan({ previous: first, decision: decision('ENTER UNDER', 'UNDER', 80, 83), countdown, now: new Date('2026-06-29T07:51:03Z') });
+  it('does not flip committed direction on one opposite read', () => {
+    const first = updateSignalPlan({ previous: null, decision: decision('ENTER OVER', 'OVER'), countdown: countdownAfterCommit, now: new Date('2026-06-29T07:51:00Z') });
+    const next = updateSignalPlan({ previous: first, decision: decision('ENTER UNDER', 'UNDER', 80, 83), countdown: countdownAfterCommit, now: new Date('2026-06-29T07:51:03Z') });
+    expect(next.commitmentStatus).toBe('COMMITTED');
+    expect(next.committedDirection).toBe('OVER');
     expect(next.direction).toBe('OVER');
-    expect(['HOLD OVER SIGNAL', 'CAUTION OVER']).toContain(next.displayAction);
+    expect(next.displayAction.startsWith('COMMITTED OVER')).toBe(true);
+  });
+
+  it('commits no trade if minute-3 evidence is weak', () => {
+    const plan = updateSignalPlan({ previous: null, decision: decision('WAIT', 'NONE', 45, 38), countdown: countdownAfterCommit, now: new Date('2026-06-29T07:51:00Z') });
+    expect(plan.commitmentStatus).toBe('NO TRADE');
+    expect(plan.committedDirection).toBe('NONE');
+    expect(plan.displayAction).toBe('NO TRADE COMMITTED');
   });
 });

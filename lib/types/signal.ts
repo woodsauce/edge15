@@ -3,6 +3,7 @@ import type { Decision, Tone } from '@/lib/types/decision';
 
 export type SignalDirection = 'OVER' | 'UNDER' | 'NONE';
 export type SignalStatus = 'NO PLAN' | 'BUILDING' | 'WATCH' | 'LEAN' | 'READY' | 'ENTER' | 'HOLD SIGNAL' | 'CAUTION' | 'CANCELLED';
+export type CommitmentStatus = 'SCOUTING' | 'COMMITTED' | 'NO TRADE';
 
 export type SignalPlan = {
   contractKey: string;
@@ -21,6 +22,10 @@ export type SignalPlan = {
   nextStep: string;
   rawAction: Decision['action'];
   rawDirection: Decision['direction'];
+  commitmentStatus: CommitmentStatus;
+  committedDirection: SignalDirection;
+  committedAt: string | null;
+  commitmentReason: string;
 };
 
 export type SignalPlanInput = {

@@ -321,7 +321,7 @@ export function GenesisDashboard() {
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-011</div>
+          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-012</div>
           <h1 className="text-3xl font-black tracking-tight">Edge15</h1>
         </div>
         <div className={`rounded-full border px-3 py-2 text-xs ${priceFeedLive ? 'border-edge-green/40 bg-edge-green/10 text-edge-green' : 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber'}`}>
@@ -345,6 +345,7 @@ export function GenesisDashboard() {
                 <div className="mt-4 rounded-2xl border border-edge-line bg-black/20 px-3 py-3 text-xs leading-5 text-slate-400">
                   {highlightText(tradePlanHelp(activeSignal?.status, activeSignal?.direction ?? decision.direction))}
                 </div>
+                {activeSignal ? <CommitmentStatusCard signal={activeSignal} countdown={countdown} /> : null}
               </div>
             </div>
           </div>
@@ -506,7 +507,7 @@ export function GenesisDashboard() {
       ) : null}
 
       {visibleSections.genesisStatus ? (
-        <Panel title="Genesis-011 status">
+        <Panel title="Genesis-012 status">
           <ul className="list-disc space-y-2 pl-5 text-sm text-edge-muted">
             <li>Trade Review outcome/reason buttons can now be unselected, and clearing a position clears the active review card.</li>
             <li>Entry Gate Checklist explains why Edge15 is READY instead of ENTER.</li>
@@ -621,6 +622,31 @@ function RecentTrades({ entries, activeId, onSelect }: { entries: TradeJournalEn
 }
 
 
+
+function CommitmentStatusCard({ signal, countdown }: { signal: SignalPlan; countdown: Countdown }) {
+  const elapsedSeconds = Math.floor(countdown.elapsedMs / 1000);
+  const secondsToCommit = Math.max(0, 180 - elapsedSeconds);
+  const toneClass = signal.commitmentStatus === 'COMMITTED'
+    ? signal.committedDirection === 'OVER'
+      ? 'border-edge-green/40 bg-edge-green/10 text-edge-green'
+      : 'border-edge-red/40 bg-edge-red/10 text-edge-red'
+    : signal.commitmentStatus === 'NO TRADE'
+      ? 'border-edge-line bg-black/20 text-edge-muted'
+      : 'border-edge-blue/40 bg-edge-blue/10 text-edge-blue';
+  const label = signal.commitmentStatus === 'COMMITTED'
+    ? `Locked Prediction: ${signal.committedDirection}`
+    : signal.commitmentStatus === 'NO TRADE'
+      ? 'Locked Prediction: No Trade'
+      : `Scout Mode: commitment in ${Math.floor(secondsToCommit / 60)}:${String(secondsToCommit % 60).padStart(2, '0')}`;
+
+  return (
+    <div className={`mt-3 rounded-2xl border px-3 py-3 text-xs leading-5 ${toneClass}`}>
+      <div className="font-black uppercase tracking-[0.16em]">{highlightText(label)}</div>
+      <div className="mt-1 opacity-90">{highlightText(signal.commitmentReason)}</div>
+    </div>
+  );
+}
+
 function EngineCard({ engine, average }: { engine: EngineVote; average?: EngineAverage }) {
   const avg = average?.average ?? engine.confidence;
   const delta = Math.round((engine.confidence - avg) * 10) / 10;
@@ -694,9 +720,9 @@ function EntryGateChecklist({
           {gates.filter((gate) => gate.passed).length}/{gates.length} passed
         </div>
       </div>
-      <div className="mt-4 space-y-2">
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
         {gates.map((gate) => (
-          <div key={gate.label} className="flex items-start gap-3 rounded-xl border border-edge-line bg-slate-950/70 p-3 text-sm">
+          <div key={gate.label} className="flex min-h-[104px] items-start gap-3 rounded-xl border border-edge-line bg-slate-950/70 p-3 text-sm">
             <span className={gate.passed ? 'text-edge-green' : gate.severity === 'block' ? 'text-edge-red' : 'text-edge-amber'}>{gate.passed ? '✅' : gate.severity === 'block' ? '⛔' : '⚠️'}</span>
             <div>
               <div className="font-bold text-slate-100">{gate.label}</div>
