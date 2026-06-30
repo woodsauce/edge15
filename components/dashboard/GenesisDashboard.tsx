@@ -9,7 +9,7 @@ import { calculateDecision } from '@/lib/decision/calculateDecision';
 import { buildCountdown } from '@/lib/position/countdown';
 import { assessPosition, createLockedPosition, POSITION_STORAGE_KEY } from '@/lib/position/positionManager';
 import { SIGNAL_PLAN_STORAGE_KEY, updateSignalPlan } from '@/lib/signal/signalPlan';
-import type { SignalPlan } from '@/lib/types/signal';
+import type { SignalDirection, SignalPlan, SignalStatus } from '@/lib/types/signal';
 import { buildTradingDesk, type EngineVote } from '@/lib/ai/tradingDesk';
 
 const blankDiagnostic = (message: string): FeedDiagnostic => ({
@@ -193,7 +193,7 @@ export function GenesisDashboard() {
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-4 px-4 py-5 sm:px-6">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-006</div>
+          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-007</div>
           <h1 className="text-3xl font-black tracking-tight">Edge15</h1>
         </div>
         <div className={`rounded-full border px-3 py-2 text-xs ${priceFeedLive ? 'border-edge-green/40 bg-edge-green/10 text-edge-green' : 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber'}`}>
@@ -221,13 +221,70 @@ export function GenesisDashboard() {
         </div>
       </Panel>
 
+      <Panel title={position ? "Trade context" : "Entry mode"}>
+        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <Metric
+            label="Trade Plan"
+            value={activeSignal?.displayAction ?? decision.action}
+            detail={activeSignal?.planText ?? decision.reason}
+            help={tradePlanHelp(activeSignal?.status, activeSignal?.direction ?? decision.direction)}
+            tone={activeSignal?.tone ?? decision.tone}
+          />
+          <Metric
+            label="Entry Score"
+            value={`${decision.entryScore}/100`}
+            detail={decision.entryQuality}
+            help={entryScoreHelp(decision.entryScore)}
+            tone={activeSignal?.tone ?? decision.tone}
+          />
+          <Metric
+            label="Opportunity"
+            value={`${decision.opportunity}%`}
+            detail={decision.opportunityLabel}
+            help={opportunityHelp(decision.opportunity)}
+            tone={decision.opportunity > 75 ? 'good' : decision.opportunity > 55 ? 'warn' : 'bad'}
+          />
+          <Metric
+            label="Trade Grade"
+            value={decision.tradeGrade}
+            detail={`${decision.confidence}% confidence`}
+            help={tradeGradeHelp(decision.tradeGrade)}
+            tone={activeSignal?.tone ?? decision.tone}
+          />
+          <Metric
+            label="Model Trust"
+            value={`${tradingDesk.modelConfidence}%`}
+            detail="Chief AI self-check"
+            help={modelTrustHelp(tradingDesk.modelConfidence)}
+            tone={tradingDesk.modelConfidence >= 75 ? 'good' : tradingDesk.modelConfidence >= 58 ? 'warn' : 'bad'}
+          />
+          <Metric
+            label="Signal Stability"
+            value={`${activeSignal?.stability ?? decision.stability}%`}
+            detail={activeSignal ? `${activeSignal.status} • ${activeSignal.confirmations} confirmations` : 'Building plan'}
+            help={signalStabilityHelp(activeSignal?.stability ?? decision.stability)}
+            tone={(activeSignal?.stability ?? decision.stability) > 70 ? 'good' : (activeSignal?.stability ?? decision.stability) > 55 ? 'warn' : 'bad'}
+          />
+        </div>
+        {position ? (
+          <div className="mt-4 rounded-xl border border-edge-blue/30 bg-edge-blue/10 px-3 py-3 text-xs text-edge-muted">
+            Trade context stays visible after entry so you can compare the original plan against the current HOLD / CAUTION / DANGER assessment.
+          </div>
+        ) : (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <button onClick={() => lockPosition('OVER')} disabled={!snapshot.btcPrice} className="rounded-2xl border border-edge-green/40 bg-edge-green/10 px-4 py-4 text-lg font-black text-edge-green disabled:opacity-40">Entered OVER</button>
+            <button onClick={() => lockPosition('UNDER')} disabled={!snapshot.btcPrice} className="rounded-2xl border border-edge-red/40 bg-edge-red/10 px-4 py-4 text-lg font-black text-edge-red disabled:opacity-40">Entered UNDER</button>
+          </div>
+        )}
+      </Panel>
+
       {position && positionAssessment ? (
         <Panel title="Locked position mode">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Metric label="Position" value={position.side} detail={`Locked with ${position.entryWindow} remaining`} tone="blue" />
-            <Metric label="Status" value={positionAssessment.status} detail={positionAssessment.riskLabel} tone={positionAssessment.tone} />
-            <Metric label="Entry" value={position.entryPrice === null ? '—' : `$${position.entryPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}`} detail={`Grade ${position.entryGrade} • score ${position.entryScore}`} tone="neutral" />
-            <Metric label="Since Entry" value={positionAssessment.distanceSinceEntry === null ? '—' : `${positionAssessment.distanceSinceEntry >= 0 ? '+' : ''}$${positionAssessment.distanceSinceEntry.toFixed(0)}`} detail="BTC move from lock" tone={positionAssessment.distanceSinceEntry === null ? 'neutral' : positionAssessment.distanceSinceEntry >= 0 === (position.side === 'OVER') ? 'good' : 'bad'} />
+            <Metric label="Position" value={position.side} detail={`Locked with ${position.entryWindow} remaining`} help="The side you said you entered. Edge15 now manages the position instead of looking for a new entry." tone="blue" />
+            <Metric label="Status" value={positionAssessment.status} detail={positionAssessment.riskLabel} help="HOLD means the trade is still behaving normally. CAUTION means pressure is building. DANGER means the plan may be failing." tone={positionAssessment.tone} />
+            <Metric label="Entry" value={position.entryPrice === null ? '—' : `$${position.entryPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}`} detail={`Grade ${position.entryGrade} • score ${position.entryScore}`} help="Snapshot of the setup when you pressed Entered OVER or Entered UNDER." tone="neutral" />
+            <Metric label="Since Entry" value={positionAssessment.distanceSinceEntry === null ? '—' : `${positionAssessment.distanceSinceEntry >= 0 ? '+' : ''}$${positionAssessment.distanceSinceEntry.toFixed(0)}`} detail="BTC move from lock" help="Shows whether BTC has moved with or against your locked side since entry." tone={positionAssessment.distanceSinceEntry === null ? 'neutral' : positionAssessment.distanceSinceEntry >= 0 === (position.side === 'OVER') ? 'good' : 'bad'} />
           </div>
           <div className="mt-4 rounded-2xl border border-edge-line bg-black/20 p-4 text-sm leading-6 text-slate-200">
             {positionAssessment.story}
@@ -237,22 +294,7 @@ export function GenesisDashboard() {
             <div className="rounded-xl border border-edge-line bg-black/20 px-3 py-3 text-xs text-edge-muted">Entry locked at {new Date(position.entryTime).toLocaleTimeString()} • Edge15 now manages HOLD / CAUTION / DANGER instead of new entry advice.</div>
           </div>
         </Panel>
-      ) : (
-        <Panel title="Entry mode">
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <Metric label="Trade Plan" value={activeSignal?.displayAction ?? decision.action} detail={activeSignal?.planText ?? decision.reason} tone={activeSignal?.tone ?? decision.tone} />
-            <Metric label="Entry Score" value={`${decision.entryScore}/100`} detail={decision.entryQuality} tone={activeSignal?.tone ?? decision.tone} />
-            <Metric label="Opportunity" value={`${decision.opportunity}%`} detail={decision.opportunityLabel} tone={decision.opportunity > 75 ? 'good' : decision.opportunity > 55 ? 'warn' : 'bad'} />
-            <Metric label="Trade Grade" value={decision.tradeGrade} detail={`${decision.confidence}% confidence`} tone={activeSignal?.tone ?? decision.tone} />
-            <Metric label="Model Trust" value={`${tradingDesk.modelConfidence}%`} detail="Chief AI self-check" tone={tradingDesk.modelConfidence >= 75 ? 'good' : tradingDesk.modelConfidence >= 58 ? 'warn' : 'bad'} />
-            <Metric label="Signal Stability" value={`${activeSignal?.stability ?? decision.stability}%`} detail={activeSignal ? `${activeSignal.status} • ${activeSignal.confirmations} confirmations` : 'Building plan'} tone={(activeSignal?.stability ?? decision.stability) > 70 ? 'good' : (activeSignal?.stability ?? decision.stability) > 55 ? 'warn' : 'bad'} />
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <button onClick={() => lockPosition('OVER')} disabled={!snapshot.btcPrice} className="rounded-2xl border border-edge-green/40 bg-edge-green/10 px-4 py-4 text-lg font-black text-edge-green disabled:opacity-40">Entered OVER</button>
-            <button onClick={() => lockPosition('UNDER')} disabled={!snapshot.btcPrice} className="rounded-2xl border border-edge-red/40 bg-edge-red/10 px-4 py-4 text-lg font-black text-edge-red disabled:opacity-40">Entered UNDER</button>
-          </div>
-        </Panel>
-      )}
+      ) : null}
 
       {visibleSections.aiDesk ? (
         <Panel title="AI Trading Desk">
@@ -338,13 +380,13 @@ export function GenesisDashboard() {
       </div>
 
       {visibleSections.genesisStatus ? (
-        <Panel title="Genesis-006 status">
+        <Panel title="Genesis-007 status">
           <ul className="list-disc space-y-2 pl-5 text-sm text-edge-muted">
-            <li>AI Trading Desk v1 added seven engine voices and a Chief AI summary.</li>
-            <li>Engine disagreement is now visible instead of hidden inside one score.</li>
-            <li>Market Story and Why Not now use the desk output, not just indicator text.</li>
-            <li>Workspace controls can hide or show sections to reduce clutter.</li>
-            <li>Genesis-005 trade-plan stability and Genesis-004 locked position mode remain intact.</li>
+            <li>Entry-mode boxes now include short plain-English explanations for phone use.</li>
+            <li>Entry Score, Opportunity, Trade Grade, Model Trust, and Signal Stability explain what their values mean.</li>
+            <li>Trade Plan context now remains visible after you tap Entered OVER or Entered UNDER.</li>
+            <li>Locked Position Mode adds HOLD / CAUTION / DANGER without hiding the original trade context.</li>
+            <li>Genesis-006 AI Trading Desk, Genesis-005 trade-plan stability, and Genesis-004 locked position mode remain intact.</li>
           </ul>
         </Panel>
       ) : null}
@@ -453,6 +495,57 @@ function badgeClass(tone: 'neutral' | 'good' | 'warn' | 'bad' | 'blue') {
   if (tone === 'warn') return 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber';
   if (tone === 'blue') return 'border-edge-blue/40 bg-edge-blue/10 text-edge-blue';
   return 'border-edge-line bg-black/20 text-edge-muted';
+}
+
+
+function tradePlanHelp(status: SignalStatus | undefined, direction: SignalDirection) {
+  if (!status || status === 'NO PLAN') return 'Market is unclear. Edge15 does not have enough evidence to build an OVER or UNDER plan yet.';
+  if (status === 'BUILDING') return `${direction} is starting to form, but the setup still needs more confirmation before entry.`;
+  if (status === 'WATCH') return `Possible ${direction} setup. Watch it, but Edge15 is not calling it entry-ready yet.`;
+  if (status === 'LEAN') return `${direction} evidence is getting stronger, but the plan is not fully confirmed.`;
+  if (status === 'READY') return `${direction} is close to actionable. Edge15 is waiting for final stability before ENTER.`;
+  if (status === 'ENTER') return `${direction} has enough confirmation and stability for Edge15 to consider entry now.`;
+  if (status === 'HOLD SIGNAL') return `The original ${direction} idea is still alive, but current conditions weakened slightly.`;
+  if (status === 'CAUTION') return `${direction} plan is under pressure. Avoid late entry unless the signal recovers.`;
+  if (status === 'CANCELLED') return 'The setup broke down. Edge15 does not want to enter that plan now.';
+  return 'Current trade-plan stage in the 15-minute signal ladder.';
+}
+
+function entryScoreHelp(score: number) {
+  if (score >= 82) return 'Strong timing. Conditions are close to entry quality right now.';
+  if (score >= 68) return 'Good timing is developing, but Edge15 still wants confirmation.';
+  if (score >= 52) return 'Mixed timing. The setup may be forming, but it is not clean yet.';
+  return 'Weak timing. Edge15 does not see a clean entry moment.';
+}
+
+function opportunityHelp(value: number) {
+  if (value >= 82) return 'High-quality 15-minute window. The market has enough movement and structure to be worth attention.';
+  if (value >= 68) return 'Good opportunity, but not perfect. Confirmation and stability still matter.';
+  if (value >= 52) return 'Developing opportunity. There may be a trade later, but the edge is not strong yet.';
+  if (value >= 34) return 'Thin opportunity. Edge15 sees a low-quality or messy setup.';
+  return 'Poor opportunity. Skipping this market may be the better decision.';
+}
+
+function tradeGradeHelp(grade: string) {
+  if (grade === 'A+' || grade === 'A') return 'Premium setup quality. This is the type of trade Edge15 wants to focus on.';
+  if (grade === 'B+' || grade === 'B') return 'Good setup, but not elite. Use the trade plan and stability before entering.';
+  if (grade === 'C') return 'Average setup. There is some evidence, but the trade is not especially clean.';
+  if (grade === 'D') return 'Low-quality setup. Edge15 needs better agreement before trusting it.';
+  return 'Very weak setup. Edge15 would generally avoid this market.';
+}
+
+function modelTrustHelp(value: number) {
+  if (value >= 80) return 'Edge15 trusts its own read because the engines are aligned and the setup is familiar.';
+  if (value >= 65) return 'Moderate trust. The model has a usable read, but there is some disagreement.';
+  if (value >= 50) return 'Low-to-moderate trust. Treat the recommendation carefully.';
+  return 'Low trust. Edge15 is uncertain and the current market is not giving a clean read.';
+}
+
+function signalStabilityHelp(value: number) {
+  if (value >= 80) return 'Very stable. Edge15 has been consistently favoring this plan instead of flipping around.';
+  if (value >= 65) return 'Stable enough to matter, but still watch for sudden weakening.';
+  if (value >= 50) return 'Developing stability. Edge15 needs more consistent updates before strong confidence.';
+  return 'Unstable. The signal is jumpy or not confirmed enough yet.';
 }
 
 function sectionLabel(key: SectionKey) {

@@ -1,45 +1,30 @@
-# Edge15 Genesis-006
+# Edge15 Genesis-007
 
-Signal Stability + Trade Plan for the Edge15 Genesis foundation.
+Genesis-007 is a clarity and usability upgrade for the working Edge15 Genesis line.
 
-Upload the **contents** of this folder into the root of `woodsauce/edge15` and commit:
+## Commit message
 
 ```text
-Genesis-006: add signal stability and trade plan
+Genesis-007: add entry helpers and persistent trade context
 ```
 
-Then let Vercel redeploy and test:
+## What's new
 
-- `/`
-- `/api/health`
-- `/api/market-data`
+- Entry-mode boxes now include short descriptions directly inside the cards.
+- Entry Score, Opportunity, Trade Grade, Model Trust, and Signal Stability explain what they mean.
+- Trade Plan context stays visible after pressing Entered OVER or Entered UNDER.
+- Locked Position Mode now adds HOLD / CAUTION / DANGER below the trade context instead of replacing it.
+- Genesis-006 AI Trading Desk, Genesis-005 signal stability, and Genesis-004 position mode remain intact.
 
-## Added
+## Upload instructions
 
-- Contract-level signal plan for the active 15-minute window
-- NO PLAN / BUILDING / WATCH / LEAN / READY / ENTER ladder
-- Signal Stability meter
-- Confirmation points before ENTER
-- Flip protection so one refresh cannot instantly reverse direction
-- HOLD SIGNAL / CAUTION states before entry
-- Next Step panel
-- Invalidation panel
-- Raw model read display
-- Local storage persistence for the active signal plan
+Upload the **contents** of this folder into the existing `woodsauce/edge15` GitHub repo root.
 
-## Kept from Genesis-004
+Do not upload the outer folder or ZIP.
 
-- Entered OVER / Entered UNDER buttons
-- Locked trade snapshot
-- Position mode
-- HOLD / CAUTION / DANGER after entry
-- Clear / contract ended button
+After Vercel deploys, verify:
 
-## Why this matters
-
-Genesis-006 fixes the pre-entry whipsaw problem. Edge15 still recalculates every refresh, but the dashboard now shows a stabilized trade plan instead of treating every 3-second update as a brand-new recommendation.
-
-
-## Genesis-006
-
-Adds AI Trading Desk v1, seven engine voices, Chief AI summary, AI Debate, Model Trust, upgraded Market Story, and hide/show workspace controls.
+- Header says Genesis-007.
+- Main metric boxes show descriptions.
+- Pressing Entered OVER/UNDER keeps Trade Plan, Entry Score, Opportunity, Trade Grade, Model Trust, and Signal Stability visible.
+- Locked Position Mode appears below the trade context.

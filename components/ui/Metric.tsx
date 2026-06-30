@@ -1,6 +1,6 @@
 import { clsx } from 'clsx';
 
-export function Metric({ label, value, detail, tone = 'neutral' }: { label: string; value: string; detail?: string; tone?: 'neutral' | 'good' | 'warn' | 'bad' | 'blue' }) {
+export function Metric({ label, value, detail, help, tone = 'neutral' }: { label: string; value: string; detail?: string; help?: string; tone?: 'neutral' | 'good' | 'warn' | 'bad' | 'blue' }) {
   const toneClass = {
     neutral: 'text-white', good: 'text-edge-green', warn: 'text-edge-amber', bad: 'text-edge-red', blue: 'text-edge-blue'
   }[tone];
@@ -9,6 +9,7 @@ export function Metric({ label, value, detail, tone = 'neutral' }: { label: stri
       <div className="text-xs uppercase tracking-[0.18em] text-edge-muted">{label}</div>
       <div className={clsx('mt-1 text-2xl font-black tracking-tight', toneClass)}>{value}</div>
       {detail ? <div className="mt-1 text-xs text-edge-muted">{detail}</div> : null}
+      {help ? <div className="mt-2 rounded-xl border border-edge-line bg-black/20 px-2 py-2 text-[11px] leading-4 text-slate-400">{help}</div> : null}
     </div>
   );
 }
