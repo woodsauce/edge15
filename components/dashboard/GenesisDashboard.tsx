@@ -10,6 +10,8 @@ import { buildCountdown } from '@/lib/position/countdown';
 import { assessPosition, createLockedPosition, POSITION_STORAGE_KEY } from '@/lib/position/positionManager';
 import { SIGNAL_PLAN_STORAGE_KEY, updateSignalPlan } from '@/lib/signal/signalPlan';
 import type { SignalDirection, SignalPlan, SignalStatus } from '@/lib/types/signal';
+import type { TradeJournalEntry, TradeOutcome, TradeReviewReason } from '@/lib/types/journal';
+import { createJournalEntry, outcomeLabel, reviewReasonLabel, summarizeJournal, TRADE_JOURNAL_STORAGE_KEY } from '@/lib/journal/tradeJournal';
 import { buildTradingDesk, type EngineVote } from '@/lib/ai/tradingDesk';
 
 const blankDiagnostic = (message: string): FeedDiagnostic => ({
@@ -37,12 +39,14 @@ const DEFAULT_SNAPSHOT: MarketSnapshot = {
 
 const SECTION_STORAGE_KEY = 'edge15.visibleSections.v1';
 const ENGINE_AVERAGE_STORAGE_KEY = 'edge15.engineAverages.v1';
+const ACTIVE_JOURNAL_ID_STORAGE_KEY = 'edge15.activeJournalEntryId.v1';
 const DEFAULT_VISIBLE_SECTIONS = {
   aiDesk: true,
   marketStory: true,
   indicators: true,
   whyNot: true,
   dataHealth: true,
+  tradeJournal: true,
   genesisStatus: true,
 };
 
@@ -68,6 +72,8 @@ export function GenesisDashboard() {
   const [signalPlan, setSignalPlan] = useState<SignalPlan | null>(null);
   const [visibleSections, setVisibleSections] = useState(DEFAULT_VISIBLE_SECTIONS);
   const [engineAverages, setEngineAverages] = useState<EngineAverages>({});
+  const [journal, setJournal] = useState<TradeJournalEntry[]>([]);
+  const [activeJournalId, setActiveJournalId] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = window.localStorage.getItem(SECTION_STORAGE_KEY);
@@ -87,6 +93,20 @@ export function GenesisDashboard() {
     } catch {
       window.localStorage.removeItem(ENGINE_AVERAGE_STORAGE_KEY);
     }
+  }, []);
+
+  useEffect(() => {
+    const savedJournal = window.localStorage.getItem(TRADE_JOURNAL_STORAGE_KEY);
+    if (savedJournal) {
+      try {
+        const parsed = JSON.parse(savedJournal) as TradeJournalEntry[];
+        if (Array.isArray(parsed)) setJournal(parsed);
+      } catch {
+        window.localStorage.removeItem(TRADE_JOURNAL_STORAGE_KEY);
+      }
+    }
+    const savedActive = window.localStorage.getItem(ACTIVE_JOURNAL_ID_STORAGE_KEY);
+    if (savedActive) setActiveJournalId(savedActive);
   }, []);
 
   function toggleSection(key: SectionKey) {
@@ -166,6 +186,8 @@ export function GenesisDashboard() {
   const decision = useMemo(() => calculateDecision(snapshot, countdown), [snapshot, countdown]);
   const positionAssessment = useMemo(() => position ? assessPosition(position, snapshot, decision, countdown) : null, [position, snapshot, decision, countdown]);
   const tradingDesk = useMemo(() => buildTradingDesk(snapshot, decision, signalPlan, countdown), [snapshot, decision, signalPlan, countdown]);
+  const journalSummary = useMemo(() => summarizeJournal(journal), [journal]);
+  const activeJournalEntry = useMemo(() => journal.find((entry) => entry.id === activeJournalId) ?? journal[0] ?? null, [journal, activeJournalId]);
   const priceFeedLive = snapshot.btcPrice !== null && snapshot.candles.length >= 10;
 
   useEffect(() => {
@@ -211,13 +233,41 @@ export function GenesisDashboard() {
 
   function lockPosition(side: TradeSide) {
     const locked = createLockedPosition(side, snapshot, decision, countdown);
+    const journalEntry = createJournalEntry({ side, snapshot, decision, countdown, modelTrust: tradingDesk.modelConfidence });
     setPosition(locked);
+    setActiveJournalId(journalEntry.id);
     window.localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(locked));
+    window.localStorage.setItem(ACTIVE_JOURNAL_ID_STORAGE_KEY, journalEntry.id);
+    setJournal((previous) => {
+      const next = [journalEntry, ...previous].slice(0, 50);
+      window.localStorage.setItem(TRADE_JOURNAL_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
   }
 
   function clearPosition() {
     setPosition(null);
+    setActiveJournalId(null);
     window.localStorage.removeItem(POSITION_STORAGE_KEY);
+    window.localStorage.removeItem(ACTIVE_JOURNAL_ID_STORAGE_KEY);
+  }
+
+  function updateJournalEntry(id: string, updates: Partial<Pick<TradeJournalEntry, 'outcome' | 'reviewReason' | 'note'>>) {
+    setJournal((previous) => {
+      const next = previous.map((entry) => entry.id === id ? { ...entry, ...updates, updatedAt: new Date().toISOString() } : entry);
+      window.localStorage.setItem(TRADE_JOURNAL_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function markActiveTrade(outcome: TradeOutcome) {
+    if (!activeJournalEntry) return;
+    updateJournalEntry(activeJournalEntry.id, { outcome });
+  }
+
+  function setActiveReviewReason(reason: TradeReviewReason) {
+    if (!activeJournalEntry) return;
+    updateJournalEntry(activeJournalEntry.id, { reviewReason: reason });
   }
 
   const activeSignal = signalPlan;
@@ -229,7 +279,7 @@ export function GenesisDashboard() {
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-009</div>
+          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-010</div>
           <h1 className="text-3xl font-black tracking-tight">Edge15</h1>
         </div>
         <div className={`rounded-full border px-3 py-2 text-xs ${priceFeedLive ? 'border-edge-green/40 bg-edge-green/10 text-edge-green' : 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber'}`}>
@@ -300,12 +350,29 @@ export function GenesisDashboard() {
               <button onClick={() => lockPosition('UNDER')} disabled={!snapshot.btcPrice} className="rounded-2xl border border-edge-red/40 bg-edge-red/10 px-4 py-4 text-lg font-black text-edge-red disabled:opacity-40">Entered UNDER</button>
             </div>
           )}
+
+          {activeJournalEntry ? (
+            <TradeReviewCard
+              entry={activeJournalEntry}
+              onOutcome={markActiveTrade}
+              onReason={setActiveReviewReason}
+            />
+          ) : null}
         </Panel>
 
         <Panel title={position ? 'Position story' : 'Market story'}>
           <p className="text-base leading-7 text-slate-200">{positionAssessment?.story ?? tradingDesk.marketStory}</p>
         </Panel>
       </section>
+
+      {visibleSections.tradeJournal ? (
+        <Panel title="Trade Review + Learning Log">
+          <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
+            <JournalSummaryCard summary={journalSummary} />
+            <RecentTrades entries={journal.slice(0, 10)} onSelect={(id) => setActiveJournalId(id)} activeId={activeJournalId} />
+          </div>
+        </Panel>
+      ) : null}
 
       <Panel title="View controls">
         <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
@@ -384,18 +451,119 @@ export function GenesisDashboard() {
       ) : null}
 
       {visibleSections.genesisStatus ? (
-        <Panel title="Genesis-009 status">
+        <Panel title="Genesis-010 status">
           <ul className="list-disc space-y-2 pl-5 text-sm text-edge-muted">
-            <li>Dashboard-style layout replaces the long stacked card flow.</li>
-            <li>The incorrect last-10 completed-period strip is hidden until period-boundary logic is verified.</li>
-            <li>Core Genesis-008 settlement guardrails remain intact.</li>
-            <li>Genesis-007 helper descriptions, Genesis-006 AI Trading Desk, Genesis-005 stability, and Genesis-004 position mode remain intact.</li>
+            <li>Trade Review and Learning Log added for tracking whether Edge15 signals helped or failed.</li>
+            <li>Recent Trades shows the last 10 saved entries with outcome, grade, timing, and distance context.</li>
+            <li>Daily Summary reports reviewed trades, wins, losses, skipped trades, and win rate.</li>
+            <li>Genesis-009 dashboard layout and Genesis-008 settlement guardrails remain intact.</li>
           </ul>
         </Panel>
       ) : null}
     </main>
   );
 }
+
+function TradeReviewCard({
+  entry,
+  onOutcome,
+  onReason,
+}: {
+  entry: TradeJournalEntry;
+  onOutcome: (outcome: TradeOutcome) => void;
+  onReason: (reason: TradeReviewReason) => void;
+}) {
+  const outcomes: Array<{ value: TradeOutcome; label: string; tone: string }> = [
+    { value: 'WON', label: 'Won', tone: 'border-edge-green/40 bg-edge-green/10 text-edge-green' },
+    { value: 'LOST', label: 'Lost', tone: 'border-edge-red/40 bg-edge-red/10 text-edge-red' },
+    { value: 'SKIPPED', label: 'Skipped', tone: 'border-edge-line bg-black/20 text-edge-muted' },
+    { value: 'BAD_SIGNAL', label: 'Bad Signal', tone: 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber' },
+    { value: 'GOOD_SIGNAL_BAD_ENTRY', label: 'Good Signal / Bad Entry', tone: 'border-edge-blue/40 bg-edge-blue/10 text-edge-blue' },
+  ];
+  const reasons: Array<{ value: TradeReviewReason; label: string }> = [
+    { value: 'late_reversal', label: 'Late reversal' },
+    { value: 'wrong_side_reference', label: 'Wrong side reference' },
+    { value: 'entered_too_late', label: 'Entered too late' },
+    { value: 'signal_flipped', label: 'Signal flipped' },
+    { value: 'too_close_to_reference', label: 'Too close to reference' },
+    { value: 'momentum_failed', label: 'Momentum failed' },
+  ];
+
+  return (
+    <div className="mt-4 rounded-3xl border border-edge-line bg-black/20 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-xs uppercase tracking-[0.22em] text-edge-muted">Trade review</div>
+          <div className="mt-1 text-sm text-slate-300">Mark how this locked signal turned out so Edge15 can be tuned from real results.</div>
+        </div>
+        <div className={`rounded-full border px-3 py-1 text-xs font-black ${entry.outcome === 'WON' ? 'border-edge-green/40 bg-edge-green/10 text-edge-green' : entry.outcome === 'LOST' || entry.outcome === 'BAD_SIGNAL' ? 'border-edge-red/40 bg-edge-red/10 text-edge-red' : 'border-edge-line bg-black/20 text-edge-muted'}`}>
+          {outcomeLabel(entry.outcome)}
+        </div>
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-5">
+        {outcomes.map((item) => (
+          <button key={item.value} onClick={() => onOutcome(item.value)} className={`rounded-xl border px-3 py-2 text-xs font-black ${entry.outcome === item.value ? item.tone : 'border-edge-line bg-slate-950 text-slate-300 hover:border-edge-blue/50'}`}>
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <div className="mt-4 text-xs uppercase tracking-[0.18em] text-edge-muted">What went wrong? Optional</div>
+      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+        {reasons.map((reason) => (
+          <button key={reason.value} onClick={() => onReason(reason.value)} className={`rounded-xl border px-3 py-2 text-xs font-bold ${entry.reviewReason === reason.value ? 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber' : 'border-edge-line bg-black/20 text-slate-400 hover:border-edge-amber/40'}`}>
+            {reason.label}
+          </button>
+        ))}
+      </div>
+      <div className="mt-3 text-xs text-edge-muted">Selected reason: {reviewReasonLabel(entry.reviewReason)}</div>
+    </div>
+  );
+}
+
+function JournalSummaryCard({ summary }: { summary: ReturnType<typeof summarizeJournal> }) {
+  return (
+    <div className="rounded-2xl border border-edge-line bg-black/20 p-4">
+      <div className="text-xs uppercase tracking-[0.22em] text-edge-muted">Daily / browser summary</div>
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <Metric label="Reviewed" value={`${summary.totalReviewed}`} detail="Marked outcomes" help="Trades you marked as won, lost, skipped, bad signal, or good signal / bad entry." tone="blue" />
+        <Metric label="Win Rate" value={summary.winRate === null ? '—' : `${summary.winRate}%`} detail="Won vs lost only" help="Skipped and review-only labels are excluded from win-rate math." tone={summary.winRate === null ? 'neutral' : summary.winRate >= 60 ? 'good' : summary.winRate >= 50 ? 'warn' : 'bad'} />
+        <Metric label="Wins" value={`${summary.wins}`} detail="Marked won" tone="good" />
+        <Metric label="Losses" value={`${summary.losses}`} detail="Marked lost" tone="bad" />
+        <Metric label="Bad Signals" value={`${summary.badSignals}`} detail="Model problem" tone="warn" />
+        <Metric label="Bad Entry" value={`${summary.goodSignalBadEntry}`} detail="Timing problem" tone="blue" />
+      </div>
+    </div>
+  );
+}
+
+function RecentTrades({ entries, activeId, onSelect }: { entries: TradeJournalEntry[]; activeId: string | null; onSelect: (id: string) => void }) {
+  if (!entries.length) {
+    return (
+      <div className="rounded-2xl border border-edge-line bg-black/20 p-4 text-sm leading-6 text-edge-muted">
+        No saved trades yet. Press Entered OVER or Entered UNDER to create the first journal snapshot.
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-2xl border border-edge-line bg-black/20 p-4">
+      <div className="text-xs uppercase tracking-[0.22em] text-edge-muted">Last 10 Edge15 signals</div>
+      <div className="mt-3 space-y-2">
+        {entries.map((entry) => (
+          <button key={entry.id} onClick={() => onSelect(entry.id)} className={`w-full rounded-xl border p-3 text-left text-sm ${activeId === entry.id ? 'border-edge-blue/50 bg-edge-blue/10' : 'border-edge-line bg-black/20 hover:border-edge-blue/40'}`}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="font-black">{highlightText(`${entry.side} • Grade ${entry.tradeGrade}`)}</div>
+              <div className={entry.outcome === 'WON' ? 'text-edge-green' : entry.outcome === 'LOST' || entry.outcome === 'BAD_SIGNAL' ? 'text-edge-red' : 'text-edge-muted'}>{outcomeLabel(entry.outcome)}</div>
+            </div>
+            <div className="mt-1 text-xs text-edge-muted">
+              {entry.entryWindow} left • score {entry.entryScore} • opportunity {entry.opportunity}% • distance {entry.entryDistance === null ? '—' : `${entry.entryDistance >= 0 ? '+' : ''}$${entry.entryDistance.toFixed(0)}`}
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 
 function EngineCard({ engine, average }: { engine: EngineVote; average?: EngineAverage }) {
   const avg = average?.average ?? engine.confidence;
@@ -590,6 +758,7 @@ function sectionLabel(key: SectionKey) {
     indicators: 'Indicators',
     whyNot: 'Why Not',
     dataHealth: 'Data',
+    tradeJournal: 'Journal',
     genesisStatus: 'Status',
   };
   return labels[key];

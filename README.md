@@ -1,34 +1,37 @@
-# Edge15 Genesis-009
+# Edge15 Genesis-010
 
-Genesis-009 is a dashboard layout correction release. It keeps the working Genesis-008 decision and settlement guardrails, but reorganizes the main screen into a cleaner dashboard-style interface.
+Edge15 is an AI-assisted decision support system for 15-minute BTC prediction markets.
 
-Commit message:
+## Genesis-010 focus
+
+Genesis-010 adds **Trade Review + Learning Log** so live usage can start producing useful tuning evidence.
+
+### Added
+
+- Trade Review card after pressing **Entered OVER** or **Entered UNDER**
+- Outcome buttons: **Won**, **Lost**, **Skipped**, **Bad Signal**, **Good Signal / Bad Entry**
+- Optional failure-reason buttons
+- Local trade journal stored in the browser
+- Recent Trades panel showing the last 10 Edge15 signals
+- Daily/browser summary with reviewed trades, wins, losses, bad signals, bad entries, and win rate
+
+### Still included
+
+- Genesis-009 dashboard layout
+- Genesis-008 settlement guardrails
+- Genesis-007 helper descriptions and persistent trade context
+- Genesis-006 AI Trading Desk
+- Genesis-005 signal stability/trade plan
+- Genesis-004 locked position manager
+- Genesis-003 indicator engine
+- Genesis-002 live data engine
+
+## Upload to GitHub
+
+Upload the contents of this folder into the root of `woodsauce/edge15` and commit:
 
 ```text
-Genesis-009: redesign dashboard layout and hide unreliable period strip
+Genesis-010: add trade review and learning log
 ```
 
-## What changed
-
-- New dashboard-style top layout.
-- Big countdown and current trade plan now sit together in the primary hero area.
-- Market snapshot is beside the main decision area instead of buried lower on the page.
-- Decision metrics are grouped into a clear dashboard card.
-- Position mode is embedded inside the decision dashboard instead of replacing context.
-- The incorrect “last 10 completed 15-minute periods” strip is hidden until period-boundary logic is verified.
-- OVER words remain green and UNDER words remain red.
-- Genesis-008 settlement guardrails remain intact.
-- Genesis-007 helper descriptions, Genesis-006 AI Trading Desk, Genesis-005 stability, and Genesis-004 position mode remain intact.
-
-## How to install
-
-Upload the contents of this folder to the existing `woodsauce/edge15` GitHub repo root.
-
-## How to test
-
-1. Confirm Vercel deployment is Ready.
-2. Open the app and confirm the header says Genesis-009.
-3. Confirm the dashboard shows: Time Remaining, Current Trade Plan, Market Snapshot, Decision Dashboard, and Market Story.
-4. Confirm Entry Score, Opportunity, Trade Grade, Model Trust, Signal Stability, and Settlement Risk still display.
-5. Press Entered OVER/UNDER and confirm the locked position panel appears without hiding the decision metrics.
-6. Confirm the last-10 completed-period strip is no longer visible.
+Then let Vercel redeploy.
