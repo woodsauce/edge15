@@ -1,11 +1,11 @@
-# Edge15 Genesis-005
+# Edge15 Genesis-006
 
 Signal Stability + Trade Plan for the Edge15 Genesis foundation.
 
 Upload the **contents** of this folder into the root of `woodsauce/edge15` and commit:
 
 ```text
-Genesis-005: add signal stability and trade plan
+Genesis-006: add signal stability and trade plan
 ```
 
 Then let Vercel redeploy and test:
@@ -37,4 +37,9 @@ Then let Vercel redeploy and test:
 
 ## Why this matters
 
-Genesis-005 fixes the pre-entry whipsaw problem. Edge15 still recalculates every refresh, but the dashboard now shows a stabilized trade plan instead of treating every 3-second update as a brand-new recommendation.
+Genesis-006 fixes the pre-entry whipsaw problem. Edge15 still recalculates every refresh, but the dashboard now shows a stabilized trade plan instead of treating every 3-second update as a brand-new recommendation.
+
+
+## Genesis-006
+
+Adds AI Trading Desk v1, seven engine voices, Chief AI summary, AI Debate, Model Trust, upgraded Market Story, and hide/show workspace controls.
