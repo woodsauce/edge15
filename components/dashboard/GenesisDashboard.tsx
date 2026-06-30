@@ -6,7 +6,8 @@ import { Metric } from '@/components/ui/Metric';
 import type { FeedDiagnostic, MarketSnapshot } from '@/lib/types/market';
 import type { LockedPosition, TradeSide } from '@/lib/types/position';
 import { calculateDecision } from '@/lib/decision/calculateDecision';
-import { buildCountdown } from '@/lib/position/countdown';
+import type { Decision, Tone } from '@/lib/types/decision';
+import { buildCountdown, type Countdown } from '@/lib/position/countdown';
 import { assessPosition, createLockedPosition, POSITION_STORAGE_KEY } from '@/lib/position/positionManager';
 import { SIGNAL_PLAN_STORAGE_KEY, updateSignalPlan } from '@/lib/signal/signalPlan';
 import type { SignalDirection, SignalPlan, SignalStatus } from '@/lib/types/signal';
@@ -40,6 +41,7 @@ const DEFAULT_SNAPSHOT: MarketSnapshot = {
 const SECTION_STORAGE_KEY = 'edge15.visibleSections.v1';
 const ENGINE_AVERAGE_STORAGE_KEY = 'edge15.engineAverages.v1';
 const ACTIVE_JOURNAL_ID_STORAGE_KEY = 'edge15.activeJournalEntryId.v1';
+const QUALITY_FILTER_STORAGE_KEY = 'edge15.tradeQualityFilter.v1';
 const DEFAULT_VISIBLE_SECTIONS = {
   aiDesk: true,
   marketStory: true,
@@ -61,6 +63,8 @@ type ApiTest = {
 
 type EngineAverage = { average: number; samples: number };
 type EngineAverages = Record<string, EngineAverage>;
+type QualityFilter = 'ANY' | 'B_PLUS' | 'A_ONLY';
+type SignalHistoryPoint = { label: string; action: string; direction: string; confidence: number; entryScore: number };
 
 export function GenesisDashboard() {
   const [snapshot, setSnapshot] = useState<MarketSnapshot>(DEFAULT_SNAPSHOT);
@@ -74,6 +78,13 @@ export function GenesisDashboard() {
   const [engineAverages, setEngineAverages] = useState<EngineAverages>({});
   const [journal, setJournal] = useState<TradeJournalEntry[]>([]);
   const [activeJournalId, setActiveJournalId] = useState<string | null>(null);
+  const [qualityFilter, setQualityFilter] = useState<QualityFilter>('ANY');
+  const [signalHistory, setSignalHistory] = useState<SignalHistoryPoint[]>([]);
+
+  useEffect(() => {
+    const savedFilter = window.localStorage.getItem(QUALITY_FILTER_STORAGE_KEY) as QualityFilter | null;
+    if (savedFilter === 'ANY' || savedFilter === 'B_PLUS' || savedFilter === 'A_ONLY') setQualityFilter(savedFilter);
+  }, []);
 
   useEffect(() => {
     const saved = window.localStorage.getItem(SECTION_STORAGE_KEY);
@@ -115,6 +126,12 @@ export function GenesisDashboard() {
       window.localStorage.setItem(SECTION_STORAGE_KEY, JSON.stringify(next));
       return next;
     });
+  }
+
+
+  function chooseQualityFilter(filter: QualityFilter) {
+    setQualityFilter(filter);
+    window.localStorage.setItem(QUALITY_FILTER_STORAGE_KEY, filter);
   }
 
   useEffect(() => {
@@ -187,7 +204,7 @@ export function GenesisDashboard() {
   const positionAssessment = useMemo(() => position ? assessPosition(position, snapshot, decision, countdown) : null, [position, snapshot, decision, countdown]);
   const tradingDesk = useMemo(() => buildTradingDesk(snapshot, decision, signalPlan, countdown), [snapshot, decision, signalPlan, countdown]);
   const journalSummary = useMemo(() => summarizeJournal(journal), [journal]);
-  const activeJournalEntry = useMemo(() => journal.find((entry) => entry.id === activeJournalId) ?? journal[0] ?? null, [journal, activeJournalId]);
+  const activeJournalEntry = useMemo(() => activeJournalId ? journal.find((entry) => entry.id === activeJournalId) ?? null : null, [journal, activeJournalId]);
   const priceFeedLive = snapshot.btcPrice !== null && snapshot.candles.length >= 10;
 
   useEffect(() => {
@@ -231,6 +248,26 @@ export function GenesisDashboard() {
     });
   }, [snapshot.fetchedAt, position]);
 
+
+  useEffect(() => {
+    if (!snapshot.fetchedAt) return;
+    const action = signalPlan?.displayAction ?? decision.action;
+    const direction = signalPlan?.direction ?? decision.direction;
+    setSignalHistory((previous) => {
+      const next = [
+        ...previous,
+        {
+          label: countdown.display,
+          action,
+          direction,
+          confidence: decision.confidence,
+          entryScore: decision.entryScore,
+        },
+      ].slice(-12);
+      return next;
+    });
+  }, [snapshot.fetchedAt, decision.action, decision.confidence, decision.direction, decision.entryScore, signalPlan?.displayAction, signalPlan?.direction, countdown.display]);
+
   function lockPosition(side: TradeSide) {
     const locked = createLockedPosition(side, snapshot, decision, countdown);
     const journalEntry = createJournalEntry({ side, snapshot, decision, countdown, modelTrust: tradingDesk.modelConfidence });
@@ -262,15 +299,20 @@ export function GenesisDashboard() {
 
   function markActiveTrade(outcome: TradeOutcome) {
     if (!activeJournalEntry) return;
-    updateJournalEntry(activeJournalEntry.id, { outcome });
+    updateJournalEntry(activeJournalEntry.id, { outcome: activeJournalEntry.outcome === outcome ? null : outcome });
   }
 
   function setActiveReviewReason(reason: TradeReviewReason) {
     if (!activeJournalEntry) return;
-    updateJournalEntry(activeJournalEntry.id, { reviewReason: reason });
+    updateJournalEntry(activeJournalEntry.id, { reviewReason: activeJournalEntry.reviewReason === reason ? null : reason });
   }
 
   const activeSignal = signalPlan;
+  const entryGates = useMemo(() => buildEntryGates(decision, activeSignal, countdown, qualityFilter), [decision, activeSignal, countdown, qualityFilter]);
+  const lateWarning = useMemo(() => buildLateEntryWarning(decision, countdown), [decision, countdown]);
+  const contradiction = useMemo(() => buildContradictionAlert(decision, activeSignal, countdown), [decision, activeSignal, countdown]);
+  const doNotChase = useMemo(() => buildDoNotChaseWarning(decision, activeSignal, countdown), [decision, activeSignal, countdown]);
+  const stillEnter = useMemo(() => position ? wouldStillEnterNow(position.side, decision, activeSignal, qualityFilter) : null, [position, decision, activeSignal, qualityFilter]);
   const price = snapshot.btcPrice ? `$${snapshot.btcPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : 'Loading';
   const strike = snapshot.strike ? `$${snapshot.strike.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'Detecting';
   const distance = snapshot.btcPrice && snapshot.strike ? snapshot.btcPrice - snapshot.strike : null;
@@ -279,7 +321,7 @@ export function GenesisDashboard() {
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-010</div>
+          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-011</div>
           <h1 className="text-3xl font-black tracking-tight">Edge15</h1>
         </div>
         <div className={`rounded-full border px-3 py-2 text-xs ${priceFeedLive ? 'border-edge-green/40 bg-edge-green/10 text-edge-green' : 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber'}`}>
@@ -314,6 +356,7 @@ export function GenesisDashboard() {
             <Metric label="Reference" value={strike} detail={snapshot.kalshi?.derivedStrike ? 'Derived 15m open' : snapshot.kalshi?.strikeSource ? `Source: ${snapshot.kalshi.strikeSource}` : snapshot.kalshi?.ticker ?? 'Kalshi optional'} />
             <Metric label="Distance" value={distance === null ? '—' : `${distance >= 0 ? '+' : ''}$${distance.toFixed(0)}`} detail={distance === null ? 'Waiting for reference' : distance >= 0 ? 'Above strike' : 'Below strike'} tone={distance === null ? 'neutral' : distance >= 0 ? 'good' : 'bad'} />
             <Metric label="Settlement Risk" value={decision.settlement.risk} detail={decision.settlement.mode === 'settlement' ? 'Final 2m reality check' : 'Normal mode'} help={decision.settlement.message} tone={decision.settlement.risk === 'Low' ? 'good' : decision.settlement.risk === 'Medium' ? 'warn' : 'bad'} />
+            <Metric label="Contract Phase" value={contractPhaseLabel(countdown)} detail={contractPhaseDetail(countdown)} help="Edge15 changes emphasis through the 15-minute window: early structure, middle confirmation, then settlement reality near the end." tone={countdown.remainingMs <= 120000 ? 'warn' : 'blue'} />
           </div>
           <div className="mt-3 rounded-2xl border border-edge-line bg-black/20 p-3 text-xs leading-5 text-edge-muted">
             The previous “last 10 periods” strip is temporarily hidden because it was not matching the real 15-minute outcomes reliably. We will re-add it only after the period boundaries are verified.
@@ -332,6 +375,17 @@ export function GenesisDashboard() {
             <Metric label="Candles" value={`${snapshot.candles.length}`} detail="1m candles available" help="More candle history gives Edge15 a stronger indicator read." tone={snapshot.candles.length >= 10 ? 'good' : 'warn'} />
           </div>
 
+
+          <div className="mt-4 grid gap-3 xl:grid-cols-[0.9fr_1.1fr]">
+            <EntryGateChecklist gates={entryGates} activeSignal={activeSignal} decision={decision} qualityFilter={qualityFilter} onQualityFilter={chooseQualityFilter} />
+            <div className="grid gap-3">
+              <ConfidenceHeatStrip history={signalHistory} />
+              {lateWarning ? <AlertCard title="Late-entry warning" message={lateWarning} tone="warn" /> : null}
+              {contradiction ? <AlertCard title="Contradiction alert" message={contradiction} tone="bad" /> : null}
+              {doNotChase ? <AlertCard title="Do not chase" message={doNotChase} tone="warn" /> : null}
+            </div>
+          </div>
+
           {position && positionAssessment ? (
             <div className="mt-4 rounded-3xl border border-edge-blue/30 bg-edge-blue/10 p-4">
               <div className="mb-3 text-xs uppercase tracking-[0.22em] text-edge-muted">Locked position mode</div>
@@ -342,6 +396,7 @@ export function GenesisDashboard() {
                 <Metric label="Since Entry" value={positionAssessment.distanceSinceEntry === null ? '—' : `${positionAssessment.distanceSinceEntry >= 0 ? '+' : ''}$${positionAssessment.distanceSinceEntry.toFixed(0)}`} detail="BTC move from lock" help="Shows whether BTC has moved with or against your locked side since entry." tone={positionAssessment.distanceSinceEntry === null ? 'neutral' : positionAssessment.distanceSinceEntry >= 0 === (position.side === 'OVER') ? 'good' : 'bad'} />
               </div>
               <div className="mt-4 rounded-2xl border border-edge-line bg-black/20 p-4 text-sm leading-6 text-slate-200">{positionAssessment.story}</div>
+              {stillEnter ? <div className={`mt-3 rounded-2xl border p-4 text-sm leading-6 ${stillEnter.tone === 'good' ? 'border-edge-green/30 bg-edge-green/10 text-edge-green' : stillEnter.tone === 'bad' ? 'border-edge-red/30 bg-edge-red/10 text-edge-red' : 'border-edge-amber/30 bg-edge-amber/10 text-edge-amber'}`}><span className="font-black">Would Edge15 still enter now? {stillEnter.answer}.</span> {stillEnter.reason}</div> : null}
               <button onClick={clearPosition} className="mt-4 w-full rounded-xl border border-edge-line bg-slate-950 px-3 py-3 text-sm font-bold text-white hover:border-edge-blue/60">Clear / contract ended</button>
             </div>
           ) : (
@@ -451,12 +506,13 @@ export function GenesisDashboard() {
       ) : null}
 
       {visibleSections.genesisStatus ? (
-        <Panel title="Genesis-010 status">
+        <Panel title="Genesis-011 status">
           <ul className="list-disc space-y-2 pl-5 text-sm text-edge-muted">
-            <li>Trade Review and Learning Log added for tracking whether Edge15 signals helped or failed.</li>
-            <li>Recent Trades shows the last 10 saved entries with outcome, grade, timing, and distance context.</li>
-            <li>Daily Summary reports reviewed trades, wins, losses, skipped trades, and win rate.</li>
-            <li>Genesis-009 dashboard layout and Genesis-008 settlement guardrails remain intact.</li>
+            <li>Trade Review outcome/reason buttons can now be unselected, and clearing a position clears the active review card.</li>
+            <li>Entry Gate Checklist explains why Edge15 is READY instead of ENTER.</li>
+            <li>Confidence Heat Strip, Contract Phase, Contradiction Alert, Do Not Chase, and Late Entry Warning added.</li>
+            <li>Trade Quality Filter lets you require A-only or B+/A setups before treating ENTER as allowed.</li>
+            <li>Position Mode now shows whether Edge15 would still enter the same side now.</li>
           </ul>
         </Panel>
       ) : null}
@@ -595,6 +651,238 @@ function EngineCard({ engine, average }: { engine: EngineVote; average?: EngineA
       <div className="mt-2 text-sm leading-6 text-slate-200">{engine.message}</div>
     </div>
   );
+}
+
+
+type EntryGate = {
+  label: string;
+  passed: boolean;
+  detail: string;
+  severity?: 'ok' | 'warn' | 'block';
+};
+
+function EntryGateChecklist({
+  gates,
+  activeSignal,
+  decision,
+  qualityFilter,
+  onQualityFilter,
+}: {
+  gates: EntryGate[];
+  activeSignal: SignalPlan | null;
+  decision: Decision;
+  qualityFilter: QualityFilter;
+  onQualityFilter: (filter: QualityFilter) => void;
+}) {
+  const blockers = gates.filter((gate) => !gate.passed);
+  const readyReason = activeSignal?.status === 'READY'
+    ? blockers.length
+      ? `READY, not ENTER because ${blockers[0].detail.toLowerCase()}`
+      : 'READY is waiting for one more stable refresh before ENTER.'
+    : activeSignal?.status === 'ENTER'
+      ? 'ENTER because the active trade plan passed the main entry gates.'
+      : activeSignal?.nextStep ?? decision.reason;
+
+  return (
+    <div className="rounded-2xl border border-edge-line bg-black/20 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-xs uppercase tracking-[0.22em] text-edge-muted">Entry gate checklist</div>
+          <div className="mt-2 text-sm leading-6 text-slate-200">{highlightText(readyReason)}</div>
+        </div>
+        <div className="rounded-full border border-edge-blue/40 bg-edge-blue/10 px-3 py-1 text-xs font-black text-edge-blue">
+          {gates.filter((gate) => gate.passed).length}/{gates.length} passed
+        </div>
+      </div>
+      <div className="mt-4 space-y-2">
+        {gates.map((gate) => (
+          <div key={gate.label} className="flex items-start gap-3 rounded-xl border border-edge-line bg-slate-950/70 p-3 text-sm">
+            <span className={gate.passed ? 'text-edge-green' : gate.severity === 'block' ? 'text-edge-red' : 'text-edge-amber'}>{gate.passed ? '✅' : gate.severity === 'block' ? '⛔' : '⚠️'}</span>
+            <div>
+              <div className="font-bold text-slate-100">{gate.label}</div>
+              <div className="mt-1 text-xs leading-5 text-edge-muted">{highlightText(gate.detail)}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 rounded-2xl border border-edge-line bg-black/20 p-3">
+        <div className="text-xs uppercase tracking-[0.18em] text-edge-muted">Trade quality filter</div>
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          {([
+            ['ANY', 'Any'],
+            ['B_PLUS', 'B+ / A'],
+            ['A_ONLY', 'A only'],
+          ] as Array<[QualityFilter, string]>).map(([value, label]) => (
+            <button key={value} onClick={() => onQualityFilter(value)} className={`rounded-xl border px-2 py-2 text-xs font-black ${qualityFilter === value ? 'border-edge-blue/50 bg-edge-blue/10 text-edge-blue' : 'border-edge-line bg-black/20 text-edge-muted'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="mt-2 text-xs leading-5 text-edge-muted">This does not change the market read. It controls how picky Edge15 should be before treating ENTER as actionable.</div>
+      </div>
+    </div>
+  );
+}
+
+function ConfidenceHeatStrip({ history }: { history: SignalHistoryPoint[] }) {
+  if (!history.length) {
+    return <AlertCard title="Confidence heat strip" message="Waiting for live updates to build the current-window signal history." tone="blue" />;
+  }
+  return (
+    <div className="rounded-2xl border border-edge-line bg-black/20 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-xs uppercase tracking-[0.22em] text-edge-muted">Confidence heat strip</div>
+        <div className="text-xs text-edge-muted">last {history.length} updates</div>
+      </div>
+      <div className="mt-3 flex gap-1 overflow-x-auto pb-1">
+        {history.map((point, index) => (
+          <div key={`${point.label}-${index}`} title={`${point.label} • ${point.action} • confidence ${point.confidence}% • entry ${point.entryScore}`} className={`h-9 min-w-8 rounded-lg border ${point.direction === 'OVER' ? 'border-edge-green/40 bg-edge-green/20' : point.direction === 'UNDER' ? 'border-edge-red/40 bg-edge-red/20' : 'border-edge-line bg-slate-900'} flex items-center justify-center text-[10px] font-black`}>
+            {point.confidence}
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 text-xs leading-5 text-edge-muted">Green bars are OVER bias, red bars are UNDER bias. A smooth climb is healthier than a jumpy signal.</div>
+    </div>
+  );
+}
+
+function AlertCard({ title, message, tone }: { title: string; message: string; tone: 'warn' | 'bad' | 'blue' }) {
+  const cls = tone === 'bad'
+    ? 'border-edge-red/40 bg-edge-red/10 text-edge-red'
+    : tone === 'warn'
+      ? 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber'
+      : 'border-edge-blue/40 bg-edge-blue/10 text-edge-blue';
+  return (
+    <div className={`rounded-2xl border p-4 ${cls}`}>
+      <div className="text-xs font-black uppercase tracking-[0.18em] opacity-80">{title}</div>
+      <div className="mt-2 text-sm leading-6">{highlightText(message)}</div>
+    </div>
+  );
+}
+
+function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, countdown: Countdown, qualityFilter: QualityFilter): EntryGate[] {
+  const direction = activeSignal?.direction ?? decision.direction;
+  const stability = activeSignal?.stability ?? decision.stability;
+  const confirmations = activeSignal?.confirmations ?? 0;
+  const gradeValue = gradeRank(decision.tradeGrade);
+  const neededGrade = qualityFilter === 'A_ONLY' ? 5 : qualityFilter === 'B_PLUS' ? 4 : 0;
+  const distance = decision.distanceToReference;
+  const onCorrectSide = direction === 'OVER'
+    ? distance !== null && distance >= 0
+    : direction === 'UNDER'
+      ? distance !== null && distance <= 0
+      : false;
+
+  return [
+    {
+      label: 'Direction bias',
+      passed: direction === 'OVER' || direction === 'UNDER',
+      detail: direction === 'NONE' ? 'No OVER or UNDER plan has formed yet.' : `${direction} plan exists.`,
+      severity: 'block',
+    },
+    {
+      label: 'Entry Score',
+      passed: decision.entryScore >= 65,
+      detail: `${decision.entryScore}/100. ${decision.entryScore >= 65 ? 'Timing is strong enough to consider entry.' : 'Timing is not strong enough yet.'}`,
+    },
+    {
+      label: 'Signal Stability',
+      passed: stability >= 60,
+      detail: `${stability}%. ${stability >= 60 ? 'The plan is stable enough to matter.' : 'The plan is still too jumpy.'}`,
+    },
+    {
+      label: 'Confirmation count',
+      passed: confirmations >= 2,
+      detail: `${confirmations}/2 confirmations. ${confirmations >= 2 ? 'The signal has survived multiple refreshes.' : 'Needs more confirming updates.'}`,
+    },
+    {
+      label: 'Price / strike reality',
+      passed: countdown.remainingMs > 120000 || onCorrectSide || decision.settlement.risk === 'Low',
+      detail: distance === null ? 'Waiting for reference price.' : `${direction} is ${onCorrectSide ? 'on the correct side of the reference' : 'on the wrong side of the reference'} with ${countdown.display} remaining.`,
+      severity: countdown.remainingMs <= 120000 && !onCorrectSide ? 'block' : 'warn',
+    },
+    {
+      label: 'Settlement risk',
+      passed: decision.settlement.risk === 'Low' || decision.settlement.risk === 'Medium',
+      detail: `${decision.settlement.risk}. ${decision.settlement.message}`,
+      severity: decision.settlement.risk === 'Extreme' || decision.settlement.risk === 'High' ? 'block' : 'warn',
+    },
+    {
+      label: 'Quality filter',
+      passed: gradeValue >= neededGrade,
+      detail: qualityFilter === 'ANY' ? `Filter allows any grade. Current grade is ${decision.tradeGrade}.` : `Filter requires ${qualityFilter === 'A_ONLY' ? 'A or better' : 'B+ or better'}. Current grade is ${decision.tradeGrade}.`,
+    },
+  ];
+}
+
+function buildLateEntryWarning(decision: Decision, countdown: Countdown) {
+  if (countdown.remainingMs > 90000) return null;
+  if (decision.settlement.risk === 'Low' && decision.entryScore >= 75) return null;
+  const required = decision.settlement.requiredMove === null ? 'unknown' : `$${decision.settlement.requiredMove.toFixed(0)}`;
+  const realistic = decision.settlement.realisticMove === null ? 'unknown' : `$${decision.settlement.realisticMove.toFixed(0)}`;
+  return `Only ${countdown.display} remains. Required move is ${required}; realistic short-window move is about ${realistic}. Late entries need extra caution.`;
+}
+
+function buildContradictionAlert(decision: Decision, activeSignal: SignalPlan | null, countdown: Countdown) {
+  const direction = activeSignal?.direction ?? decision.direction;
+  const distance = decision.distanceToReference;
+  if (direction === 'NONE' || distance === null) return null;
+  const wrongSide = direction === 'OVER' ? distance < 0 : direction === 'UNDER' ? distance > 0 : false;
+  if (wrongSide && countdown.remainingMs <= 120000) {
+    return `${direction} plan conflicts with settlement reality: price is ${distance > 0 ? 'above' : 'below'} the reference by $${Math.abs(distance).toFixed(0)} with ${countdown.display} left.`;
+  }
+  if (decision.indicators.trendBias !== 'neutral' && decision.indicators.momentumBias !== 'neutral' && decision.indicators.trendBias !== decision.indicators.momentumBias) {
+    return `Trend and momentum disagree. Trend is ${decision.indicators.trendBias}, but momentum is ${decision.indicators.momentumBias}.`;
+  }
+  return null;
+}
+
+function buildDoNotChaseWarning(decision: Decision, activeSignal: SignalPlan | null, countdown: Countdown) {
+  const direction = activeSignal?.direction ?? decision.direction;
+  if (direction === 'NONE') return null;
+  const rsi = decision.indicators.rsi14;
+  const momentum = decision.indicators.momentum5m;
+  const extendedUnder = direction === 'UNDER' && rsi !== null && rsi <= 32 && momentum !== null && momentum < -90;
+  const extendedOver = direction === 'OVER' && rsi !== null && rsi >= 68 && momentum !== null && momentum > 90;
+  if ((extendedUnder || extendedOver) && decision.entryScore < 74) {
+    return `${direction} may be directionally right, but the move already looks extended. Do not chase unless timing improves.`;
+  }
+  if (countdown.remainingMs <= 60000 && decision.entryScore < 70) {
+    return `The window is nearly over and Entry Score is only ${decision.entryScore}/100. Avoid chasing a late signal.`;
+  }
+  return null;
+}
+
+function wouldStillEnterNow(side: TradeSide, decision: Decision, activeSignal: SignalPlan | null, qualityFilter: QualityFilter): { answer: 'YES' | 'NO' | 'BORDERLINE'; reason: string; tone: Tone } {
+  const direction = activeSignal?.direction ?? decision.direction;
+  const stability = activeSignal?.stability ?? decision.stability;
+  const qualityOk = gradeRank(decision.tradeGrade) >= (qualityFilter === 'A_ONLY' ? 5 : qualityFilter === 'B_PLUS' ? 4 : 0);
+  if (direction === side && decision.entryScore >= 74 && stability >= 62 && qualityOk && decision.settlement.risk !== 'High' && decision.settlement.risk !== 'Extreme') {
+    return { answer: 'YES', tone: 'good', reason: `The current read still supports ${side} with acceptable timing and risk.` };
+  }
+  if (direction === side && decision.entryScore >= 55 && decision.settlement.risk !== 'Extreme') {
+    return { answer: 'BORDERLINE', tone: 'warn', reason: `The ${side} idea is still alive, but timing or risk is no longer clean.` };
+  }
+  return { answer: 'NO', tone: 'bad', reason: `Edge15 would not open a fresh ${side} trade under the current conditions.` };
+}
+
+function contractPhaseLabel(countdown: Countdown) {
+  if (countdown.remainingMs <= 30000) return 'Final Seconds';
+  if (countdown.remainingMs <= 120000) return 'Settlement Mode';
+  if (countdown.remainingMs <= 600000) return 'Middle Confirmation';
+  return 'Early Read';
+}
+
+function contractPhaseDetail(countdown: Countdown) {
+  if (countdown.remainingMs <= 30000) return 'Reality check dominates';
+  if (countdown.remainingMs <= 120000) return 'Distance and velocity matter most';
+  if (countdown.remainingMs <= 600000) return 'Confirmation matters most';
+  return 'Bias is still forming';
+}
+
+function gradeRank(grade: string) {
+  const ranks: Record<string, number> = { 'A+': 6, A: 5, 'B+': 4, B: 3, C: 2, D: 1, F: 0 };
+  return ranks[grade] ?? 0;
 }
 
 function HealthRow({ label, diagnostic }: { label: string; diagnostic: FeedDiagnostic }) {
