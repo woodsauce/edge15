@@ -1,11 +1,11 @@
-# Edge15 Genesis-003
+# Edge15 Genesis-004
 
 Countdown + indicator engine for the Genesis live-data foundation.
 
 Upload the contents of this folder into the root of `woodsauce/edge15` and commit:
 
 ```text
-Genesis-003: add countdown and indicator engine
+Genesis-004: add countdown and indicator engine
 ```
 
 Then let Vercel redeploy and test:
@@ -36,3 +36,8 @@ Then let Vercel redeploy and test:
 ## Not included yet
 
 This is still Genesis core. Position manager, full AI Debate, historical pattern matching, and hide/show sections come later.
+
+
+## Genesis-004
+
+Adds locked trade mode and Position Manager: Entered OVER/UNDER, HOLD/CAUTION/DANGER, entry snapshot, post-entry warnings, and Clear / contract ended.

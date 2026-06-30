@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Panel } from '@/components/ui/Panel';
 import { Metric } from '@/components/ui/Metric';
 import type { FeedDiagnostic, MarketSnapshot } from '@/lib/types/market';
+import type { LockedPosition, TradeSide } from '@/lib/types/position';
 import { calculateDecision } from '@/lib/decision/calculateDecision';
 import { buildCountdown } from '@/lib/position/countdown';
+import { assessPosition, createLockedPosition, POSITION_STORAGE_KEY } from '@/lib/position/positionManager';
 
 const blankDiagnostic = (message: string): FeedDiagnostic => ({
   status: 'unknown',
@@ -42,10 +44,22 @@ export function GenesisDashboard() {
   const [now, setNow] = useState(() => new Date());
   const [apiTest, setApiTest] = useState<ApiTest>({});
   const [testing, setTesting] = useState(false);
+  const [position, setPosition] = useState<LockedPosition | null>(null);
 
   useEffect(() => {
     const clock = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(clock);
+  }, []);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(POSITION_STORAGE_KEY);
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved) as LockedPosition;
+      if (parsed?.side === 'OVER' || parsed?.side === 'UNDER') setPosition(parsed);
+    } catch {
+      window.localStorage.removeItem(POSITION_STORAGE_KEY);
+    }
   }, []);
 
   useEffect(() => {
@@ -89,8 +103,20 @@ export function GenesisDashboard() {
     setTesting(false);
   }
 
+  function lockPosition(side: TradeSide) {
+    const locked = createLockedPosition(side, snapshot, decision, countdown);
+    setPosition(locked);
+    window.localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(locked));
+  }
+
+  function clearPosition() {
+    setPosition(null);
+    window.localStorage.removeItem(POSITION_STORAGE_KEY);
+  }
+
   const countdown = useMemo(() => buildCountdown(now), [now]);
   const decision = useMemo(() => calculateDecision(snapshot, countdown), [snapshot, countdown]);
+  const positionAssessment = useMemo(() => position ? assessPosition(position, snapshot, decision, countdown) : null, [position, snapshot, decision, countdown]);
   const priceFeedLive = snapshot.btcPrice !== null && snapshot.candles.length >= 10;
 
   const price = snapshot.btcPrice ? `$${snapshot.btcPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : 'Loading';
@@ -101,7 +127,7 @@ export function GenesisDashboard() {
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-4 px-4 py-5 sm:px-6">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-003</div>
+          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-004</div>
           <h1 className="text-3xl font-black tracking-tight">Edge15</h1>
         </div>
         <div className={`rounded-full border px-3 py-2 text-xs ${priceFeedLive ? 'border-edge-green/40 bg-edge-green/10 text-edge-green' : 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber'}`}>
@@ -115,15 +141,37 @@ export function GenesisDashboard() {
         <div className="mt-2 text-sm text-edge-muted">Current 15-minute window • live data refreshes every 3 seconds</div>
       </Panel>
 
-      <Panel>
-        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <Metric label="Recommendation" value={decision.action} detail={decision.reason} tone={decision.tone} />
-          <Metric label="Entry Score" value={`${decision.entryScore}/100`} detail={decision.entryQuality} tone={decision.tone} />
-          <Metric label="Opportunity" value={`${decision.opportunity}%`} detail={decision.opportunityLabel} tone={decision.opportunity > 75 ? 'good' : decision.opportunity > 55 ? 'warn' : 'bad'} />
-          <Metric label="Trade Grade" value={decision.tradeGrade} detail={`${decision.confidence}% confidence`} tone={decision.tone} />
-          <Metric label="Stability" value={`${decision.stability}%`} detail="Signal agreement" tone={decision.stability > 70 ? 'good' : decision.stability > 55 ? 'warn' : 'bad'} />
-        </div>
-      </Panel>
+      {position && positionAssessment ? (
+        <Panel title="Locked position mode">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Metric label="Position" value={position.side} detail={`Locked with ${position.entryWindow} remaining`} tone="blue" />
+            <Metric label="Status" value={positionAssessment.status} detail={positionAssessment.riskLabel} tone={positionAssessment.tone} />
+            <Metric label="Entry" value={position.entryPrice === null ? '—' : `$${position.entryPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}`} detail={`Grade ${position.entryGrade} • score ${position.entryScore}`} tone="neutral" />
+            <Metric label="Since Entry" value={positionAssessment.distanceSinceEntry === null ? '—' : `${positionAssessment.distanceSinceEntry >= 0 ? '+' : ''}$${positionAssessment.distanceSinceEntry.toFixed(0)}`} detail="BTC move from lock" tone={positionAssessment.distanceSinceEntry === null ? 'neutral' : positionAssessment.distanceSinceEntry >= 0 === (position.side === 'OVER') ? 'good' : 'bad'} />
+          </div>
+          <div className="mt-4 rounded-2xl border border-edge-line bg-black/20 p-4 text-sm leading-6 text-slate-200">
+            {positionAssessment.story}
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <button onClick={clearPosition} className="rounded-xl border border-edge-line bg-slate-950 px-3 py-3 text-sm font-bold text-white hover:border-edge-blue/60">Clear / contract ended</button>
+            <div className="rounded-xl border border-edge-line bg-black/20 px-3 py-3 text-xs text-edge-muted">Entry locked at {new Date(position.entryTime).toLocaleTimeString()} • Edge15 now manages HOLD / CAUTION / DANGER instead of new entry advice.</div>
+          </div>
+        </Panel>
+      ) : (
+        <Panel title="Entry mode">
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <Metric label="Recommendation" value={decision.action} detail={decision.reason} tone={decision.tone} />
+            <Metric label="Entry Score" value={`${decision.entryScore}/100`} detail={decision.entryQuality} tone={decision.tone} />
+            <Metric label="Opportunity" value={`${decision.opportunity}%`} detail={decision.opportunityLabel} tone={decision.opportunity > 75 ? 'good' : decision.opportunity > 55 ? 'warn' : 'bad'} />
+            <Metric label="Trade Grade" value={decision.tradeGrade} detail={`${decision.confidence}% confidence`} tone={decision.tone} />
+            <Metric label="Stability" value={`${decision.stability}%`} detail="Signal agreement" tone={decision.stability > 70 ? 'good' : decision.stability > 55 ? 'warn' : 'bad'} />
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <button onClick={() => lockPosition('OVER')} disabled={!snapshot.btcPrice} className="rounded-2xl border border-edge-green/40 bg-edge-green/10 px-4 py-4 text-lg font-black text-edge-green disabled:opacity-40">Entered OVER</button>
+            <button onClick={() => lockPosition('UNDER')} disabled={!snapshot.btcPrice} className="rounded-2xl border border-edge-red/40 bg-edge-red/10 px-4 py-4 text-lg font-black text-edge-red disabled:opacity-40">Entered UNDER</button>
+          </div>
+        </Panel>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         <Panel title="Market">
@@ -158,7 +206,6 @@ export function GenesisDashboard() {
         </Panel>
       </div>
 
-
       <div className="grid gap-4 md:grid-cols-2">
         <Panel title="Indicators">
           <div className="grid grid-cols-2 gap-3">
@@ -171,26 +218,26 @@ export function GenesisDashboard() {
           </div>
         </Panel>
 
-        <Panel title="Why not?">
+        <Panel title={position ? 'Position warnings' : 'Why not?'}>
           <ul className="space-y-2 text-sm text-slate-200">
-            {decision.whyNot.map((item) => (
+            {(positionAssessment?.reasons ?? decision.whyNot).map((item) => (
               <li key={item} className="rounded-xl border border-edge-line bg-black/20 p-3">{item}</li>
             ))}
           </ul>
         </Panel>
       </div>
 
-      <Panel title="Market story">
-        <p className="text-base leading-7 text-slate-200">{decision.story}</p>
+      <Panel title={position ? 'Position story' : 'Market story'}>
+        <p className="text-base leading-7 text-slate-200">{positionAssessment?.story ?? decision.story}</p>
       </Panel>
 
-      <Panel title="Genesis-003 status">
+      <Panel title="Genesis-004 status">
         <ul className="list-disc space-y-2 pl-5 text-sm text-edge-muted">
-          <li>Coinbase remains the primary live BTC data feed.</li>
-          <li>The 15-minute countdown updates every second.</li>
-          <li>Indicator engine now calculates RSI, EMA bias, VWAP, ATR, volatility, and momentum.</li>
-          <li>Decision engine now outputs Entry Score, Opportunity, Trade Grade, Confidence, Stability, and Why Not.</li>
-          <li>Kalshi reference/strike is detected or safely derived without breaking the dashboard.</li>
+          <li>Entry mode still shows recommendation, Entry Score, Opportunity, Trade Grade, Confidence, and Stability.</li>
+          <li>Entered OVER / Entered UNDER locks the trade snapshot in local storage.</li>
+          <li>Locked position mode switches the main status to HOLD / CAUTION / DANGER.</li>
+          <li>Position Manager tracks entry price, reference, current distance, and post-entry warnings.</li>
+          <li>Clear / contract ended returns Edge15 to entry mode.</li>
         </ul>
       </Panel>
     </main>

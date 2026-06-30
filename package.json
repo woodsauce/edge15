@@ -1,6 +1,6 @@
 {
   "name": "edge15",
-  "version": "0.3.0-genesis",
+  "version": "0.4.0-genesis",
   "private": true,
   "scripts": {
     "dev": "next dev",
