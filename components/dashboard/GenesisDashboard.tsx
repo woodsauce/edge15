@@ -39,19 +39,17 @@ const DEFAULT_SNAPSHOT: MarketSnapshot = {
   fetchedAt: null,
 };
 
-const SECTION_STORAGE_KEY = 'edge15.visibleSections.v1';
+const SECTION_STORAGE_KEY = 'edge15.visibleSections.v2.focus';
 const ENGINE_AVERAGE_STORAGE_KEY = 'edge15.engineAverages.v1';
 const ACTIVE_JOURNAL_ID_STORAGE_KEY = 'edge15.activeJournalEntryId.v1';
 const QUALITY_FILTER_STORAGE_KEY = 'edge15.tradeQualityFilter.v1';
 const COMMITMENT_ACCURACY_STORAGE_KEY = 'edge15.commitmentAccuracy.v2.performance';
 const DEFAULT_VISIBLE_SECTIONS = {
-  aiDesk: true,
-  marketStory: true,
-  indicators: true,
-  whyNot: true,
-  dataHealth: true,
-  tradeJournal: true,
-  genesisStatus: true,
+  aiDesk: false,
+  indicators: false,
+  whyNot: false,
+  dataHealth: false,
+  genesisStatus: false,
 };
 
 type SectionKey = keyof typeof DEFAULT_VISIBLE_SECTIONS;
@@ -380,11 +378,14 @@ export function GenesisDashboard() {
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-015</div>
+          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-016</div>
           <h1 className="text-3xl font-black tracking-tight">Edge15</h1>
         </div>
-        <div className={`rounded-full border px-3 py-2 text-xs ${priceFeedLive ? 'border-edge-green/40 bg-edge-green/10 text-edge-green' : 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber'}`}>
-          {priceFeedLive ? 'Price feed live' : 'Price feed degraded'}
+        <div className="flex flex-col items-end gap-2">
+          <div className={`rounded-full border px-3 py-2 text-xs ${priceFeedLive ? 'border-edge-green/40 bg-edge-green/10 text-edge-green' : 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber'}`}>
+            {priceFeedLive ? 'Price feed live' : 'Price feed degraded'}
+          </div>
+          <div className="hidden rounded-full border border-edge-line bg-black/20 px-3 py-1 text-[11px] text-edge-muted sm:block">Selective accuracy • final 3m blocked</div>
         </div>
       </header>
 
@@ -424,14 +425,13 @@ export function GenesisDashboard() {
         </Panel>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-3">
+      <section className="grid gap-4 xl:grid-cols-2">
         <PerformanceTrackerPanel records={commitmentAccuracy} />
         <CommitmentAccuracyPanel records={commitmentAccuracy} activeSignal={activeSignal} />
-        <MicrostructurePanel orderBook={snapshot.orderBook} />
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[1fr_0.85fr]">
-        <Panel title={position ? "Trade context + position" : "Decision dashboard"}>
+      <section className="grid gap-4">
+        <Panel title={position ? "Trade context + position" : "Focused decision dashboard"}>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <Metric label="Entry Score" value={`${decision.entryScore}/100`} detail={decision.entryQuality} help={entryScoreHelp(decision.entryScore)} tone={activeSignal?.tone ?? decision.tone} />
             <Metric label="Opportunity" value={`${decision.opportunity}%`} detail={decision.opportunityLabel} help={opportunityHelp(decision.opportunity)} tone={decision.opportunity > 75 ? 'good' : decision.opportunity > 55 ? 'warn' : 'bad'} />
@@ -444,13 +444,10 @@ export function GenesisDashboard() {
 
           <div className="mt-4 grid gap-3">
             <EntryGateChecklist gates={entryGates} activeSignal={activeSignal} decision={decision} qualityFilter={qualityFilter} onQualityFilter={chooseQualityFilter} />
-            <div className="grid gap-3 xl:grid-cols-[0.7fr_1.3fr]">
-              <ConfidenceHeatStrip history={signalHistory} />
-              <div className="grid gap-3 lg:grid-cols-3">
-                {lateWarning ? <AlertCard title="Late-entry warning" message={lateWarning} tone="warn" /> : null}
-                {contradiction ? <AlertCard title="Contradiction alert" message={contradiction} tone="bad" /> : null}
-                {doNotChase ? <AlertCard title="Do not chase" message={doNotChase} tone="warn" /> : null}
-              </div>
+            <div className="grid gap-3 lg:grid-cols-3">
+              {lateWarning ? <AlertCard title="Late-entry warning" message={lateWarning} tone="warn" /> : null}
+              {contradiction ? <AlertCard title="Contradiction alert" message={contradiction} tone="bad" /> : null}
+              {doNotChase ? <AlertCard title="Do not chase" message={doNotChase} tone="warn" /> : null}
             </div>
           </div>
 
@@ -474,30 +471,10 @@ export function GenesisDashboard() {
             </div>
           )}
 
-          {activeJournalEntry ? (
-            <TradeReviewCard
-              entry={activeJournalEntry}
-              onOutcome={markActiveTrade}
-              onReason={setActiveReviewReason}
-            />
-          ) : null}
-        </Panel>
-
-        <Panel title={position ? 'Position story' : 'Market story'}>
-          <p className="text-base leading-7 text-slate-200">{positionAssessment?.story ?? tradingDesk.marketStory}</p>
         </Panel>
       </section>
 
-      {visibleSections.tradeJournal ? (
-        <Panel title="Trade Review + Learning Log">
-          <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
-            <JournalSummaryCard summary={journalSummary} />
-            <RecentTrades entries={journal.slice(0, 10)} onSelect={(id) => setActiveJournalId(id)} activeId={activeJournalId} />
-          </div>
-        </Panel>
-      ) : null}
-
-      <Panel title="View controls">
+      <Panel title="Advanced tools hidden by default">
         <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
           {Object.entries(visibleSections).map(([key, visible]) => (
             <button key={key} onClick={() => toggleSection(key as SectionKey)} className={`rounded-xl border px-3 py-2 text-xs font-bold ${visible ? 'border-edge-blue/50 bg-edge-blue/10 text-edge-blue' : 'border-edge-line bg-black/20 text-edge-muted'}`}>
@@ -509,15 +486,7 @@ export function GenesisDashboard() {
 
       {visibleSections.aiDesk ? (
         <Panel title="AI Trading Desk">
-          <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-            <div className="rounded-2xl border border-edge-blue/30 bg-edge-blue/10 p-4 text-sm leading-6 text-slate-100">{tradingDesk.chiefSummary}</div>
-            <div className="rounded-2xl border border-edge-line bg-black/20 p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-edge-muted">AI Debate</div>
-              <div className="mt-3 space-y-2 text-sm leading-6 text-slate-200">
-                {tradingDesk.debate.map((line) => <div key={line} className="rounded-xl border border-edge-line bg-black/20 p-3">{highlightText(line)}</div>)}
-              </div>
-            </div>
-          </div>
+          <div className="rounded-2xl border border-edge-blue/30 bg-edge-blue/10 p-4 text-sm leading-6 text-slate-100">{tradingDesk.chiefSummary}</div>
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {tradingDesk.engines.map((engine) => <EngineCard key={engine.id} engine={engine} average={engineAverages[engine.id]} />)}
           </div>
@@ -574,12 +543,12 @@ export function GenesisDashboard() {
       ) : null}
 
       {visibleSections.genesisStatus ? (
-        <Panel title="Genesis-015 status">
+        <Panel title="Genesis-016 status">
           <ul className="list-disc space-y-2 pl-5 text-sm text-edge-muted">
             <li>Commitment Accuracy Tracker grades Edge15's locked contract predictions for the last 10 completed windows.</li>
             <li>Market microstructure now uses Coinbase level-2 order book spread, depth, and imbalance as another professional-style data read.</li>
             <li>Genesis-012.1 minute-9 commitment behavior remains intact.</li>
-            <li>Genesis-011 entry gates, filters, heat strip, and caution alerts remain intact.</li>
+            <li>Focused cockpit mode hides market microstructure, market story, confidence heat strip, AI debate, and manual trade-review panels by default.</li>
           </ul>
         </Panel>
       ) : null}
@@ -1076,7 +1045,7 @@ function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, co
     {
       label: 'Settlement risk',
       passed: decision.settlement.risk === 'Low',
-      detail: `${decision.settlement.risk}. Clean ENTER needs Low settlement risk in Genesis-015. ${decision.settlement.message}`,
+      detail: `${decision.settlement.risk}. Clean ENTER needs Low settlement risk in Genesis-016. ${decision.settlement.message}`,
       severity: decision.settlement.risk === 'Extreme' || decision.settlement.risk === 'High' ? 'block' : 'warn',
     },
     buildValueGate(direction, countdown, snapshot),
@@ -1090,7 +1059,7 @@ function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, co
 
 function buildLateEntryWarning(decision: Decision, countdown: Countdown) {
   if (countdown.remainingMs > 360000) return null;
-  if (countdown.remainingMs <= 180000) return `Only ${countdown.display} remains. Genesis-015 blocks fresh late entries because the last 3 minutes are too jumpy and the payout is often too small.`;
+  if (countdown.remainingMs <= 180000) return `Only ${countdown.display} remains. Genesis-016 blocks fresh late entries because the last 3 minutes are too jumpy and the payout is often too small.`;
   if (decision.settlement.risk === 'Low' && decision.entryScore >= 82) return null;
   const required = decision.settlement.requiredMove === null ? 'unknown' : `$${decision.settlement.requiredMove.toFixed(0)}`;
   const realistic = decision.settlement.realisticMove === null ? 'unknown' : `$${decision.settlement.realisticMove.toFixed(0)}`;
@@ -1315,12 +1284,10 @@ function signalStabilityHelp(value: number) {
 
 function sectionLabel(key: SectionKey) {
   const labels: Record<SectionKey, string> = {
-    aiDesk: 'AI Desk',
-    marketStory: 'Story',
+    aiDesk: 'AI Engines',
     indicators: 'Indicators',
-    whyNot: 'Why Not',
+    whyNot: 'Warnings',
     dataHealth: 'Data',
-    tradeJournal: 'Journal',
     genesisStatus: 'Status',
   };
   return labels[key];
