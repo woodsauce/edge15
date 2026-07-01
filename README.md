@@ -1,41 +1,31 @@
-# Edge15 Genesis-021
+# Edge15 Genesis-022
 
-AI decision support for 15-minute BTC prediction markets.
+Edge15 Genesis-022 adds the Entry Value Engine and Early Entry Lab while preserving the current working live trading logic.
 
-## Genesis-021 focus
+## What is new
 
-Trade Quality + Auto-Tightening.
+- Entry Value: BAD / FAIR / GOOD / GREAT
+- Estimated win probability vs current Kalshi ask when available
+- Estimated edge: Edge15 probability minus market price
+- Risk/reward display: cost, upside, and risk
+- Early Entry Lab for clean early-entry observation
+- Commit Timing Lab now shows average ask and timing value edge
+- Best Accuracy / Best Value / Best Balance timing labels
+- Current Lock text overflow cleanup
 
-- Adds a simple Trade Quality score: AVOID / WEAK / DECENT / STRONG.
-- Adds auto-tightening when recent Edge15 performance drops.
-- Adds a late-market flip detector to reduce final-window chase entries.
-- Adds trade replay snapshots for recent completed commitments.
-- Keeps Genesis-016 focused cockpit layout.
+## What stayed unchanged
 
-## Deploy
+- Core Genesis-017/020/021 live recommendation logic
+- Commit Timing Lab storage compatibility
+- Performance Tracker storage compatibility
+- Version Lab and Strategy Profile Lab compatibility
 
-Upload the contents of this folder to the GitHub repo root and commit.
+## Install
 
-Suggested commit message:
+Upload the contents of this folder into the GitHub repo root and commit.
+
+Recommended commit message:
 
 ```text
-Genesis-021: add trade quality and auto-tightening
+Genesis-022: add entry value engine
 ```
-
-
-## Genesis-021
-
-Performance Backup + Version Comparison release. Core Genesis-017 entry logic is preserved. Adds export, copy, and restore for performance data so results can be saved before cache clears or device/browser changes.
-
-
-## Genesis-021
-
-Tracker Reliability + Timing Leaderboard release. Adds Tracker Status, Recheck Pending Results, clearer current-window capture visibility, pending-result counts, and preserves Genesis-019 timing/performance storage keys so data carries forward. Core trading logic remains unchanged from Genesis-017/018/019.
-
-
-## Genesis-021 additions
-
-- Version Lab for manually comparing Genesis builds side by side.
-- Strategy Profile Lab for shadow-testing Aggressive, Balanced, Selective, Ultra Selective, Value Only, and No-Chase profiles without changing live trading logic.
-- Backup/export now includes Version Lab and Strategy Profile Lab data.
-- Core trading logic remains preserved from Genesis-017/020.

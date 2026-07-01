@@ -1,6 +1,6 @@
-# Genesis-021: Version Lab + Strategy Profiles
+# Genesis-022: Version Lab + Strategy Profiles
 
-Genesis-021 keeps the live trading logic unchanged and adds testing tools around it.
+Genesis-022 keeps the live trading logic unchanged and adds testing tools around it.
 
 ## Added
 
