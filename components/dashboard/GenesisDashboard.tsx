@@ -45,6 +45,8 @@ const ACTIVE_JOURNAL_ID_STORAGE_KEY = 'edge15.activeJournalEntryId.v1';
 const QUALITY_FILTER_STORAGE_KEY = 'edge15.tradeQualityFilter.v1';
 const COMMITMENT_ACCURACY_STORAGE_KEY = 'edge15.commitmentAccuracy.v3.replay';
 const COMMIT_TIMING_LAB_STORAGE_KEY = 'edge15.commitTimingLab.v1';
+const VERSION_LAB_STORAGE_KEY = 'edge15.versionLab.v1';
+const STRATEGY_PROFILE_LAB_STORAGE_KEY = 'edge15.strategyProfileLab.v1';
 const DEFAULT_VISIBLE_SECTIONS = {
   aiDesk: false,
   indicators: false,
@@ -120,6 +122,45 @@ type PerformanceWindow = {
   winRate: number | null;
 };
 
+type VersionLabRecord = {
+  id: string;
+  version: string;
+  wins: number;
+  losses: number;
+  noTrades: number;
+  sampleWindow: string;
+  notes: string;
+  updatedAt: string;
+};
+
+type StrategyProfile = {
+  id: string;
+  label: string;
+  description: string;
+};
+
+type StrategyProfileRecord = {
+  id: string;
+  contractKey: string;
+  profileId: string;
+  profileLabel: string;
+  capturedAt: string;
+  committedDirection: 'OVER' | 'UNDER' | 'NONE';
+  entryScore: number;
+  confidence: number;
+  opportunity: number;
+  stability: number;
+  tradeGrade: string;
+  settlementRisk: Decision['settlement']['risk'];
+  payoutAsk: number | null;
+  outcome: 'OVER' | 'UNDER' | 'FLAT' | 'UNKNOWN';
+  correct: boolean | null;
+  open: number | null;
+  close: number | null;
+  resolvedAt: string | null;
+  note: string;
+};
+
 type TrackerStatus = {
   tabStatus: 'Visible' | 'Background';
   tracking: 'Active' | 'Background' | 'Delayed';
@@ -177,6 +218,19 @@ const COMMIT_TIMING_CHECKPOINTS: CommitTimingCheckpoint[] = [
 
 const TIMING_CAPTURE_WINDOW_MS = 45 * 1000;
 
+const STRATEGY_PROFILES: StrategyProfile[] = [
+  { id: 'aggressive', label: 'Aggressive', description: 'Takes earlier/more frequent reads when the direction is clean enough.' },
+  { id: 'balanced', label: 'Balanced', description: 'Middle ground: requires decent confidence, opportunity, and stability.' },
+  { id: 'selective', label: 'Selective', description: 'Higher-quality setups only, similar to the versions that are no-trading more often.' },
+  { id: 'ultra', label: 'Ultra Selective', description: 'Very strict. Meant to chase the 85%+ goal by skipping many windows.' },
+  { id: 'value', label: 'Value Only', description: 'Requires a playable ask price so correct calls are still worth entering.' },
+  { id: 'no_chase', label: 'No-Chase', description: 'Blocks late/high-flip setups and avoids forced final-window entries.' },
+];
+
+const STRATEGY_CAPTURE_ELAPSED_MS = 9 * 60 * 1000;
+const STRATEGY_CAPTURE_WINDOW_MS = 60 * 1000;
+
+
 export function GenesisDashboard() {
   const [snapshot, setSnapshot] = useState<MarketSnapshot>(DEFAULT_SNAPSHOT);
   const [error, setError] = useState<string | null>(null);
@@ -193,6 +247,8 @@ export function GenesisDashboard() {
   const [signalHistory, setSignalHistory] = useState<SignalHistoryPoint[]>([]);
   const [commitmentAccuracy, setCommitmentAccuracy] = useState<CommitmentAccuracyRecord[]>([]);
   const [commitTimingLab, setCommitTimingLab] = useState<CommitTimingRecord[]>([]);
+  const [versionLab, setVersionLab] = useState<VersionLabRecord[]>([]);
+  const [strategyProfileLab, setStrategyProfileLab] = useState<StrategyProfileRecord[]>([]);
   const [backupStatus, setBackupStatus] = useState<string>('Ready');
   const [lastDataPullAt, setLastDataPullAt] = useState<string | null>(null);
   const [recheckStatus, setRecheckStatus] = useState<string>('Ready');
@@ -216,6 +272,24 @@ export function GenesisDashboard() {
         if (Array.isArray(parsed)) setCommitTimingLab(parsed.slice(0, 1000));
       } catch {
         window.localStorage.removeItem(COMMIT_TIMING_LAB_STORAGE_KEY);
+      }
+    }
+    const savedVersionLab = window.localStorage.getItem(VERSION_LAB_STORAGE_KEY);
+    if (savedVersionLab) {
+      try {
+        const parsed = JSON.parse(savedVersionLab) as VersionLabRecord[];
+        if (Array.isArray(parsed)) setVersionLab(parsed.slice(0, 100));
+      } catch {
+        window.localStorage.removeItem(VERSION_LAB_STORAGE_KEY);
+      }
+    }
+    const savedStrategyLab = window.localStorage.getItem(STRATEGY_PROFILE_LAB_STORAGE_KEY);
+    if (savedStrategyLab) {
+      try {
+        const parsed = JSON.parse(savedStrategyLab) as StrategyProfileRecord[];
+        if (Array.isArray(parsed)) setStrategyProfileLab(parsed.slice(0, 1000));
+      } catch {
+        window.localStorage.removeItem(STRATEGY_PROFILE_LAB_STORAGE_KEY);
       }
     }
   }, []);
@@ -424,7 +498,7 @@ export function GenesisDashboard() {
   function buildPerformanceBackup() {
     return {
       app: 'Edge15',
-      release: 'Genesis-020',
+      release: 'Genesis-021',
       exportedAt: new Date().toISOString(),
       storageKeys: {
         commitmentAccuracy: COMMITMENT_ACCURACY_STORAGE_KEY,
@@ -433,9 +507,13 @@ export function GenesisDashboard() {
         engineAverages: ENGINE_AVERAGE_STORAGE_KEY,
         qualityFilter: QUALITY_FILTER_STORAGE_KEY,
         commitTimingLab: COMMIT_TIMING_LAB_STORAGE_KEY,
+        versionLab: VERSION_LAB_STORAGE_KEY,
+        strategyProfileLab: STRATEGY_PROFILE_LAB_STORAGE_KEY,
       },
       commitmentAccuracy,
       commitTimingLab,
+      versionLab,
+      strategyProfileLab,
       signalPlan,
       journal,
       engineAverages,
@@ -449,7 +527,7 @@ export function GenesisDashboard() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `edge15-genesis-020-performance-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `edge15-genesis-021-performance-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -480,6 +558,16 @@ export function GenesisDashboard() {
         setCommitTimingLab(restoredTiming);
         window.localStorage.setItem(COMMIT_TIMING_LAB_STORAGE_KEY, JSON.stringify(restoredTiming));
       }
+      if (Array.isArray(parsed.versionLab)) {
+        const restoredVersionLab = parsed.versionLab.slice(0, 100) as VersionLabRecord[];
+        setVersionLab(restoredVersionLab);
+        window.localStorage.setItem(VERSION_LAB_STORAGE_KEY, JSON.stringify(restoredVersionLab));
+      }
+      if (Array.isArray(parsed.strategyProfileLab)) {
+        const restoredStrategyLab = parsed.strategyProfileLab.slice(0, 1000) as StrategyProfileRecord[];
+        setStrategyProfileLab(restoredStrategyLab);
+        window.localStorage.setItem(STRATEGY_PROFILE_LAB_STORAGE_KEY, JSON.stringify(restoredStrategyLab));
+      }
       if (parsed.signalPlan) {
         setSignalPlan(parsed.signalPlan as SignalPlan);
         window.localStorage.setItem(SIGNAL_PLAN_STORAGE_KEY, JSON.stringify(parsed.signalPlan));
@@ -501,9 +589,32 @@ export function GenesisDashboard() {
   }
 
 
+  function addVersionLabRecord(record: Omit<VersionLabRecord, 'id' | 'updatedAt'>) {
+    const nextRecord: VersionLabRecord = {
+      ...record,
+      id: `${record.version}:${Date.now()}`,
+      updatedAt: new Date().toISOString(),
+    };
+    setVersionLab((previous) => {
+      const next = [nextRecord, ...previous].slice(0, 100);
+      window.localStorage.setItem(VERSION_LAB_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function deleteVersionLabRecord(id: string) {
+    setVersionLab((previous) => {
+      const next = previous.filter((record) => record.id !== id);
+      window.localStorage.setItem(VERSION_LAB_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }
+
+
   function recheckPendingResults() {
     let resolvedCommitments = 0;
     let resolvedTiming = 0;
+    let resolvedProfiles = 0;
     setCommitmentAccuracy((previous) => {
       const next = previous.map((record) => {
         const resolved = resolveCommitmentAccuracyRecord(record, snapshot.candles);
@@ -522,7 +633,16 @@ export function GenesisDashboard() {
       window.localStorage.setItem(COMMIT_TIMING_LAB_STORAGE_KEY, JSON.stringify(next));
       return next;
     });
-    setRecheckStatus(`Rechecked pending results: ${resolvedCommitments} commitment, ${resolvedTiming} timing updates`);
+    setStrategyProfileLab((previous) => {
+      const next = previous.map((record) => {
+        const resolved = resolveStrategyProfileRecord(record, snapshot.candles);
+        if (record.correct === null && resolved.correct !== null) resolvedProfiles += 1;
+        return resolved;
+      });
+      window.localStorage.setItem(STRATEGY_PROFILE_LAB_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+    setRecheckStatus(`Rechecked pending results: ${resolvedCommitments} commitment, ${resolvedTiming} timing, ${resolvedProfiles} profile updates`);
   }
 
   useEffect(() => {
@@ -572,6 +692,32 @@ export function GenesisDashboard() {
       return next;
     });
   }, [snapshot.fetchedAt, snapshot.candles, countdown.elapsedMs, countdown.windowStart, decision, snapshot, now]);
+
+  useEffect(() => {
+    if (!snapshot.fetchedAt) return;
+    const elapsed = countdown.elapsedMs;
+    const inCaptureWindow = elapsed >= STRATEGY_CAPTURE_ELAPSED_MS && elapsed <= STRATEGY_CAPTURE_ELAPSED_MS + STRATEGY_CAPTURE_WINDOW_MS;
+    if (!inCaptureWindow) return;
+    setStrategyProfileLab((previous) => {
+      const nextMap = new Map<string, StrategyProfileRecord>();
+      for (const record of previous) {
+        const resolved = resolveStrategyProfileRecord(record, snapshot.candles);
+        nextMap.set(record.id, resolved);
+      }
+      const contractKey = `15m:${countdown.windowStart.toISOString()}`;
+      for (const profile of STRATEGY_PROFILES) {
+        const id = `${contractKey}:${profile.id}`;
+        if (!nextMap.has(id)) {
+          nextMap.set(id, createStrategyProfileRecord({ profile, contractKey, decision, snapshot, countdown, flipRisk, now }));
+        }
+      }
+      const next = Array.from(nextMap.values())
+        .sort((a, b) => Date.parse(b.capturedAt) - Date.parse(a.capturedAt))
+        .slice(0, 1000);
+      window.localStorage.setItem(STRATEGY_PROFILE_LAB_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, [snapshot.fetchedAt, snapshot.candles, countdown.elapsedMs, countdown.windowStart, decision, snapshot, countdown, flipRisk, now]);
 
   function lockPosition(side: TradeSide) {
     const locked = createLockedPosition(side, snapshot, decision, countdown);
@@ -629,13 +775,14 @@ export function GenesisDashboard() {
     countdown,
     commitmentAccuracy,
     commitTimingLab,
-  }), [tabStatus, lastDataPullAt, activeSignal, countdown, commitmentAccuracy, commitTimingLab]);
+    strategyProfileLab,
+  }), [tabStatus, lastDataPullAt, activeSignal, countdown, commitmentAccuracy, commitTimingLab, strategyProfileLab]);
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-020</div>
+          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-021</div>
           <h1 className="text-3xl font-black tracking-tight">Edge15</h1>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -691,6 +838,10 @@ export function GenesisDashboard() {
       </section>
 
       <CommitTimingLabPanel records={commitTimingLab} countdown={countdown} />
+      <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+        <VersionLabPanel records={versionLab} onAdd={addVersionLabRecord} onDelete={deleteVersionLabRecord} />
+        <StrategyProfileLabPanel records={strategyProfileLab} />
+      </section>
       <input ref={restoreInputRef} type="file" accept="application/json" className="hidden" onChange={(event) => restorePerformanceData(event.target.files?.[0] ?? null)} />
 
       <TradeReplayPanel records={commitmentAccuracy} />
@@ -808,12 +959,12 @@ export function GenesisDashboard() {
       ) : null}
 
       {visibleSections.genesisStatus ? (
-        <Panel title="Genesis-020 status">
+        <Panel title="Genesis-021 status">
           <ul className="list-disc space-y-2 pl-5 text-sm text-edge-muted">
             <li>Commitment Accuracy Tracker grades Edge15's locked contract predictions for the last 10 completed windows.</li>
             <li>Market microstructure now uses Coinbase level-2 order book spread, depth, and imbalance as another professional-style data read.</li>
             <li>Genesis-012.1 minute-9 commitment behavior remains intact.</li>
-            <li>Genesis-020 preserves the Genesis-017 trade logic and adds performance backup, restore, and version-comparison support.</li>
+            <li>Genesis-021 preserves the Genesis-017 trade logic and adds performance backup, restore, and version-comparison support.</li>
           </ul>
         </Panel>
       ) : null}
@@ -927,6 +1078,128 @@ function RecentTrades({ entries, activeId, onSelect }: { entries: TradeJournalEn
 
 
 
+
+function VersionLabPanel({ records, onAdd, onDelete }: { records: VersionLabRecord[]; onAdd: (record: Omit<VersionLabRecord, 'id' | 'updatedAt'>) => void; onDelete: (id: string) => void }) {
+  const [version, setVersion] = useState('Genesis-017');
+  const [wins, setWins] = useState('');
+  const [losses, setLosses] = useState('');
+  const [noTrades, setNoTrades] = useState('');
+  const [sampleWindow, setSampleWindow] = useState('Last 10');
+  const [notes, setNotes] = useState('');
+  const rows = buildVersionLabRows(records);
+  const bestBalance = rows
+    .filter((row) => row.scored >= 3)
+    .sort((a, b) => b.balanceScore - a.balanceScore || b.winRate - a.winRate || b.scored - a.scored)[0] ?? null;
+
+  function submit() {
+    const parsedWins = Math.max(0, Number.parseInt(wins || '0', 10) || 0);
+    const parsedLosses = Math.max(0, Number.parseInt(losses || '0', 10) || 0);
+    const parsedNoTrades = Math.max(0, Number.parseInt(noTrades || '0', 10) || 0);
+    if (!version.trim() || parsedWins + parsedLosses + parsedNoTrades === 0) return;
+    onAdd({ version: version.trim(), wins: parsedWins, losses: parsedLosses, noTrades: parsedNoTrades, sampleWindow: sampleWindow.trim() || 'Manual', notes: notes.trim() });
+    setWins('');
+    setLosses('');
+    setNoTrades('');
+    setNotes('');
+  }
+
+  return (
+    <Panel title="Version Lab">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Metric label="Best Balance" value={bestBalance ? bestBalance.version : 'Collecting'} detail={bestBalance ? `${bestBalance.winRate}% • ${bestBalance.wins}-${bestBalance.losses} • ${bestBalance.noTrades} skips` : 'Need 3+ scored'} help="Compares manually entered version test results. Balance rewards win rate, sample size, and useful selectivity." tone={bestBalance && bestBalance.winRate >= 75 ? 'good' : 'blue'} />
+        <Metric label="Tracked Versions" value={`${rows.length}`} detail="Manual rows" help="Use this for side-by-side testing like Genesis-014 vs 015 vs 017 without relying on memory." tone="neutral" />
+        <Metric label="Rule" value="Do not overfit" detail="Sample size matters" help="A 4/4 version is promising, but not proof. Edge15 labels small samples so we do not chase lucky runs." tone="warn" />
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-6">
+        <input value={version} onChange={(event) => setVersion(event.target.value)} className="rounded-xl border border-edge-line bg-black/30 px-3 py-2 text-xs text-white outline-none focus:border-edge-blue sm:col-span-2" placeholder="Genesis-017" />
+        <input value={wins} onChange={(event) => setWins(event.target.value)} className="rounded-xl border border-edge-line bg-black/30 px-3 py-2 text-xs text-white outline-none focus:border-edge-green" placeholder="Wins" inputMode="numeric" />
+        <input value={losses} onChange={(event) => setLosses(event.target.value)} className="rounded-xl border border-edge-line bg-black/30 px-3 py-2 text-xs text-white outline-none focus:border-edge-red" placeholder="Losses" inputMode="numeric" />
+        <input value={noTrades} onChange={(event) => setNoTrades(event.target.value)} className="rounded-xl border border-edge-line bg-black/30 px-3 py-2 text-xs text-white outline-none focus:border-edge-blue" placeholder="No trades" inputMode="numeric" />
+        <button onClick={submit} className="rounded-xl border border-edge-blue/40 bg-edge-blue/10 px-3 py-2 text-xs font-black text-edge-blue hover:border-edge-blue">Add</button>
+        <input value={sampleWindow} onChange={(event) => setSampleWindow(event.target.value)} className="rounded-xl border border-edge-line bg-black/30 px-3 py-2 text-xs text-white outline-none focus:border-edge-blue sm:col-span-2" placeholder="Last 10 / last hour" />
+        <input value={notes} onChange={(event) => setNotes(event.target.value)} className="rounded-xl border border-edge-line bg-black/30 px-3 py-2 text-xs text-white outline-none focus:border-edge-blue sm:col-span-4" placeholder="Notes, like: 7 no trades, cleaner UI, too aggressive, etc." />
+      </div>
+
+      <div className="mt-4 overflow-hidden rounded-2xl border border-edge-line">
+        <div className="grid grid-cols-[92px_78px_74px_88px_1fr_28px] gap-2 bg-black/30 px-3 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-edge-muted">
+          <div>Version</div><div>W/L</div><div>Rate</div><div>No trade</div><div>Read</div><div />
+        </div>
+        {rows.length ? rows.map((row) => (
+          <div key={row.id} className="grid grid-cols-[92px_78px_74px_88px_1fr_28px] gap-2 border-t border-edge-line px-3 py-2 text-xs">
+            <div className="font-black text-slate-100">{row.version}</div>
+            <div className="text-slate-300">{row.wins}-{row.losses}</div>
+            <div className={row.winRate >= 75 ? 'font-black text-edge-green' : row.winRate >= 60 ? 'font-black text-edge-amber' : 'font-black text-edge-red'}>{row.scored ? `${row.winRate}%` : '—'}</div>
+            <div className="text-edge-muted">{row.noTrades}</div>
+            <div className="text-edge-muted">{row.sampleLabel} • {row.notes || row.sampleWindow}</div>
+            <button onClick={() => onDelete(row.id)} className="text-edge-muted hover:text-edge-red">×</button>
+          </div>
+        )) : <div className="border-t border-edge-line px-3 py-4 text-sm text-edge-muted">Add the results you are seeing across Genesis versions. This panel is manual on purpose, so it can compare different tabs/devices.</div>}
+      </div>
+    </Panel>
+  );
+}
+
+function buildVersionLabRows(records: VersionLabRecord[]) {
+  return records.map((record) => {
+    const scored = record.wins + record.losses;
+    const winRate = scored ? Math.round((record.wins / scored) * 100) : 0;
+    const total = scored + record.noTrades;
+    const selectivity = total ? Math.round((record.noTrades / total) * 100) : 0;
+    const sampleLabel = scored < 5 ? 'Too early' : scored < 15 ? 'Building sample' : scored < 40 ? 'Useful sample' : 'Strong sample';
+    const balanceScore = winRate + Math.min(scored, 30) * 0.7 + Math.min(selectivity, 60) * 0.15;
+    return { ...record, scored, total, winRate, selectivity, sampleLabel, balanceScore };
+  });
+}
+
+function StrategyProfileLabPanel({ records }: { records: StrategyProfileRecord[] }) {
+  const rows = buildStrategyProfileRows(records);
+  const best = rows.filter((row) => row.resolved >= 5).sort((a, b) => b.balanceScore - a.balanceScore || b.resolved - a.resolved)[0] ?? null;
+  return (
+    <Panel title="Strategy Profile Lab">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Metric label="Best Profile" value={best ? best.label : 'Collecting'} detail={best ? `${best.winRate}% • ${best.wins}-${best.losses}` : 'Need 5+ scored'} help="Shadow-tests trading styles once per window. It does not change the live recommendation." tone={best && (best.winRate ?? 0) >= 75 ? 'good' : 'blue'} />
+        <Metric label="Profiles" value={`${STRATEGY_PROFILES.length}`} detail="Shadow tested" help="Aggressive, balanced, selective, ultra-selective, value-only, and no-chase profiles are graded separately." tone="neutral" />
+        <Metric label="Live Logic" value="Unchanged" detail="Observation only" help="Genesis-021 adds testing and comparison. It does not alter the working Genesis-017/020 entry engine." tone="blue" />
+      </div>
+      <div className="mt-4 overflow-hidden rounded-2xl border border-edge-line">
+        <div className="grid grid-cols-[96px_72px_64px_74px_1fr] gap-2 bg-black/30 px-3 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-edge-muted">
+          <div>Profile</div><div>W/L</div><div>Rate</div><div>No trade</div><div>Read</div>
+        </div>
+        {rows.map((row) => (
+          <div key={row.id} className="grid grid-cols-[96px_72px_64px_74px_1fr] gap-2 border-t border-edge-line px-3 py-2 text-xs">
+            <div className="font-black text-slate-100">{row.label}</div>
+            <div className="text-slate-300">{row.wins}-{row.losses}</div>
+            <div className={row.winRate === null ? 'text-edge-muted' : row.winRate >= 75 ? 'font-black text-edge-green' : row.winRate >= 60 ? 'font-black text-edge-amber' : 'font-black text-edge-red'}>{row.winRate === null ? '—' : `${row.winRate}%`}</div>
+            <div className="text-edge-muted">{row.noTrades}</div>
+            <div className="text-edge-muted">{row.sampleLabel} • {row.description}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 rounded-2xl border border-edge-line bg-black/20 p-3 text-xs leading-5 text-edge-muted">
+        Captures happen around the same minute-9 decision point. Later, we can combine this with the Commit Timing Lab to pick the best timing and the best profile together.
+      </div>
+    </Panel>
+  );
+}
+
+function buildStrategyProfileRows(records: StrategyProfileRecord[]) {
+  return STRATEGY_PROFILES.map((profile) => {
+    const group = records.filter((record) => record.profileId === profile.id);
+    const scored = group.filter((record) => record.correct !== null);
+    const wins = scored.filter((record) => record.correct === true).length;
+    const losses = scored.filter((record) => record.correct === false).length;
+    const noTrades = group.filter((record) => record.committedDirection === 'NONE').length;
+    const resolved = wins + losses;
+    const winRate = resolved ? Math.round((wins / resolved) * 100) : null;
+    const total = resolved + noTrades;
+    const selectivity = total ? Math.round((noTrades / total) * 100) : 0;
+    const sampleLabel = resolved < 5 ? `Need ${5 - resolved} more scored` : resolved < 15 ? 'Building sample' : resolved < 40 ? 'Useful sample' : 'Strong sample';
+    const balanceScore = (winRate ?? 0) + Math.min(resolved, 30) * 0.8 + Math.min(selectivity, 65) * 0.1;
+    return { ...profile, wins, losses, noTrades, resolved, winRate, selectivity, sampleLabel, balanceScore };
+  });
+}
+
 function PerformanceBackupPanel({
   records,
   status,
@@ -948,7 +1221,7 @@ function PerformanceBackupPanel({
   return (
     <Panel title="Backup + compare">
       <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-        <Metric label="Current version" value="Genesis-020" detail="Logic preserved" help="Genesis-020 does not change the core Genesis-017 trading engine. It protects your results and makes side-by-side testing easier." tone="blue" />
+        <Metric label="Current version" value="Genesis-021" detail="Logic preserved" help="Genesis-021 does not change the core Genesis-017 trading engine. It protects your results and makes side-by-side testing easier." tone="blue" />
         <Metric label="All-time read" value={bestLabel} detail={allTime.winRate === null ? 'No scored records' : `${allTime.winRate}% • ${allTime.wins}-${allTime.losses}`} help="Quick version-comparison label from this browser's stored performance records." tone={bestTone} />
         <Metric label="Last hour" value={recent.winRate === null ? '—' : `${recent.winRate}%`} detail={`W/L ${recent.wins}-${recent.losses}`} help="Useful when comparing multiple Genesis versions side by side over the same test window." tone={recent.winRate === null ? 'neutral' : recent.winRate >= 75 ? 'good' : recent.winRate >= 60 ? 'warn' : 'bad'} />
       </div>
@@ -973,7 +1246,7 @@ function TradeQualityPanel({ quality, autoTightening, flipRisk }: { quality: Tra
         <Metric label="Late Flip Risk" value={flipRisk.level} detail={`${flipRisk.flips} recent flips`} help={flipRisk.message} tone={flipRisk.tone} />
       </div>
       <div className="mt-3 rounded-2xl border border-edge-line bg-black/20 p-3 text-xs leading-5 text-edge-muted">
-        Genesis-020 uses this score as the cockpit read: prediction strength is not enough unless value, stability, flip risk, and recent model performance are acceptable.
+        Genesis-021 uses this score as the cockpit read: prediction strength is not enough unless value, stability, flip risk, and recent model performance are acceptable.
       </div>
     </Panel>
   );
@@ -995,7 +1268,7 @@ function TradeReplayPanel({ records }: { records: CommitmentAccuracyRecord[] }) 
           </div>
         ))}
       </div>
-      <div className="mt-3 text-xs leading-5 text-edge-muted">Replay records help identify bad setups without manual buttons. Older records may not have every Genesis-020 snapshot field until new commitments are created.</div>
+      <div className="mt-3 text-xs leading-5 text-edge-muted">Replay records help identify bad setups without manual buttons. Older records may not have every Genesis-021 snapshot field until new commitments are created.</div>
     </Panel>
   );
 }
@@ -1148,7 +1421,7 @@ function TrackerStatusPanel({ status, recheckStatus, onRecheck }: { status: Trac
   );
 }
 
-function buildTrackerStatus({ tabStatus, lastDataPullAt, signalPlan, countdown, commitmentAccuracy, commitTimingLab }: { tabStatus: 'Visible' | 'Background'; lastDataPullAt: string | null; signalPlan: SignalPlan | null; countdown: Countdown; commitmentAccuracy: CommitmentAccuracyRecord[]; commitTimingLab: CommitTimingRecord[] }): TrackerStatus {
+function buildTrackerStatus({ tabStatus, lastDataPullAt, signalPlan, countdown, commitmentAccuracy, commitTimingLab, strategyProfileLab }: { tabStatus: 'Visible' | 'Background'; lastDataPullAt: string | null; signalPlan: SignalPlan | null; countdown: Countdown; commitmentAccuracy: CommitmentAccuracyRecord[]; commitTimingLab: CommitTimingRecord[]; strategyProfileLab: StrategyProfileRecord[] }): TrackerStatus {
   const nowMs = Date.now();
   const pullMs = lastDataPullAt ? Date.parse(lastDataPullAt) : NaN;
   const secondsSincePull = Number.isFinite(pullMs) ? Math.round((nowMs - pullMs) / 1000) : null;
@@ -1157,10 +1430,11 @@ function buildTrackerStatus({ tabStatus, lastDataPullAt, signalPlan, countdown, 
   const currentWindowCaptured = signalPlan?.contractKey === currentKey && (signalPlan.commitmentStatus === 'COMMITTED' || signalPlan.commitmentStatus === 'NO TRADE');
   const timingCaptured = commitTimingLab.filter((record) => record.contractKey === currentKey).length;
   const pendingCommitments = commitmentAccuracy.filter((record) => record.committedDirection !== 'NONE' && record.correct === null).length;
-  const pendingTiming = commitTimingLab.filter((record) => record.committedDirection !== 'NONE' && record.correct === null).length;
+  const pendingTiming = commitTimingLab.filter((record) => record.committedDirection !== 'NONE' && record.correct === null).length + strategyProfileLab.filter((record) => record.committedDirection !== 'NONE' && record.correct === null).length;
   const gradedTimes = [
     ...commitmentAccuracy.filter((record) => record.correct !== null).map((record) => Date.parse(record.resolvedAt)),
     ...commitTimingLab.filter((record) => record.correct !== null && record.resolvedAt).map((record) => Date.parse(record.resolvedAt as string)),
+    ...strategyProfileLab.filter((record) => record.correct !== null && record.resolvedAt).map((record) => Date.parse(record.resolvedAt as string)),
   ].filter(Number.isFinite) as number[];
   const lastGradedAt = gradedTimes.length ? new Date(Math.max(...gradedTimes)).toISOString() : null;
   const message = tracking === 'Active'
@@ -1178,7 +1452,7 @@ function buildTrackerStatus({ tabStatus, lastDataPullAt, signalPlan, countdown, 
     pendingTiming,
     lastDataPullAt,
     lastGradedAt,
-    recordsStored: commitmentAccuracy.length + commitTimingLab.length,
+    recordsStored: commitmentAccuracy.length + commitTimingLab.length + strategyProfileLab.length,
     message,
   };
 }
@@ -1323,6 +1597,121 @@ function chooseShadowCommitDirection(decision: Decision, snapshot: MarketSnapsho
   const ask = decision.direction === 'OVER' ? snapshot.kalshi?.yesAsk ?? null : snapshot.kalshi?.noAsk ?? null;
   if (ask !== null && ask >= 94) return 'NONE';
   return decision.direction;
+}
+
+
+function createStrategyProfileRecord({ profile, contractKey, decision, snapshot, countdown, flipRisk, now }: { profile: StrategyProfile; contractKey: string; decision: Decision; snapshot: MarketSnapshot; countdown: Countdown; flipRisk: FlipRisk; now: Date }): StrategyProfileRecord {
+  const direction = chooseStrategyProfileDirection(profile.id, decision, snapshot, countdown, flipRisk);
+  const ask = direction === 'OVER' ? snapshot.kalshi?.yesAsk ?? null : direction === 'UNDER' ? snapshot.kalshi?.noAsk ?? null : null;
+  return {
+    id: `${contractKey}:${profile.id}`,
+    contractKey,
+    profileId: profile.id,
+    profileLabel: profile.label,
+    capturedAt: now.toISOString(),
+    committedDirection: direction,
+    entryScore: decision.entryScore,
+    confidence: decision.confidence,
+    opportunity: decision.opportunity,
+    stability: decision.stability,
+    tradeGrade: decision.tradeGrade,
+    settlementRisk: decision.settlement.risk,
+    payoutAsk: ask,
+    outcome: 'UNKNOWN',
+    correct: null,
+    open: null,
+    close: null,
+    resolvedAt: null,
+    note: direction === 'NONE' ? `${profile.label} profile skipped this setup.` : `${profile.label} profile shadow-picked ${direction}.`,
+  };
+}
+
+function chooseStrategyProfileDirection(profileId: string, decision: Decision, snapshot: MarketSnapshot, countdown: Countdown, flipRisk: FlipRisk): 'OVER' | 'UNDER' | 'NONE' {
+  if (decision.direction !== 'OVER' && decision.direction !== 'UNDER') return 'NONE';
+  if (decision.action === 'AVOID') return 'NONE';
+  const ask = decision.direction === 'OVER' ? snapshot.kalshi?.yesAsk ?? null : snapshot.kalshi?.noAsk ?? null;
+  const wrongSide = decision.direction === 'OVER'
+    ? decision.distanceToReference !== null && decision.distanceToReference < -8
+    : decision.distanceToReference !== null && decision.distanceToReference > 8;
+
+  if (profileId === 'aggressive') {
+    if (decision.settlement.risk === 'Extreme') return 'NONE';
+    if (decision.confidence < 52 || decision.opportunity < 52 || decision.stability < 48) return 'NONE';
+    if (ask !== null && ask >= 97) return 'NONE';
+    return decision.direction;
+  }
+
+  if (profileId === 'balanced') {
+    if (decision.settlement.risk === 'Extreme' || decision.settlement.risk === 'High') return 'NONE';
+    if (decision.confidence < 58 || decision.opportunity < 58 || decision.stability < 55) return 'NONE';
+    if (wrongSide) return 'NONE';
+    if (ask !== null && ask >= 94) return 'NONE';
+    return decision.direction;
+  }
+
+  if (profileId === 'selective') {
+    if (decision.settlement.risk !== 'Low' && decision.settlement.risk !== 'Medium') return 'NONE';
+    if (decision.confidence < 64 || decision.opportunity < 64 || decision.stability < 62 || decision.entryScore < 58) return 'NONE';
+    if (wrongSide) return 'NONE';
+    if (ask !== null && ask >= 90) return 'NONE';
+    return decision.direction;
+  }
+
+  if (profileId === 'ultra') {
+    if (!decision.action.startsWith('ENTER')) return 'NONE';
+    if (decision.settlement.risk !== 'Low') return 'NONE';
+    if (decision.confidence < 72 || decision.opportunity < 70 || decision.stability < 70 || decision.entryScore < 64) return 'NONE';
+    if (wrongSide) return 'NONE';
+    if (ask !== null && ask >= 82) return 'NONE';
+    return decision.direction;
+  }
+
+  if (profileId === 'value') {
+    if (decision.settlement.risk === 'Extreme' || decision.settlement.risk === 'High') return 'NONE';
+    if (decision.confidence < 60 || decision.opportunity < 60 || decision.entryScore < 56) return 'NONE';
+    if (wrongSide) return 'NONE';
+    if (ask === null) return 'NONE';
+    if (ask < 35 || ask > 78) return 'NONE';
+    return decision.direction;
+  }
+
+  if (profileId === 'no_chase') {
+    if (countdown.remainingMs <= 3 * 60 * 1000) return 'NONE';
+    if (flipRisk.level === 'High') return 'NONE';
+    if (decision.settlement.risk === 'Extreme' || decision.settlement.risk === 'High') return 'NONE';
+    if (decision.confidence < 60 || decision.opportunity < 60 || decision.stability < 58) return 'NONE';
+    if (wrongSide) return 'NONE';
+    if (ask !== null && ask >= 92) return 'NONE';
+    return decision.direction;
+  }
+
+  return 'NONE';
+}
+
+function resolveStrategyProfileRecord(record: StrategyProfileRecord, candles: MarketSnapshot['candles']): StrategyProfileRecord {
+  if (record.correct !== null || record.committedDirection === 'NONE') {
+    if (record.committedDirection === 'NONE' && record.resolvedAt === null) return { ...record, resolvedAt: new Date().toISOString() };
+    return record;
+  }
+  const startIso = record.contractKey.replace('15m:', '');
+  const startMs = Date.parse(startIso);
+  if (!Number.isFinite(startMs)) return record;
+  const endMs = startMs + 15 * 60 * 1000;
+  if (Date.now() < endMs + 5000) return record;
+  const windowCandles = candles.slice().sort((a, b) => a.time - b.time).filter((c) => c.time >= startMs && c.time < endMs);
+  if (windowCandles.length < 2) return record;
+  const first = windowCandles[0];
+  const last = windowCandles[windowCandles.length - 1];
+  const change = last.close - first.open;
+  const outcome: StrategyProfileRecord['outcome'] = Math.abs(change) < 0.01 ? 'FLAT' : change > 0 ? 'OVER' : 'UNDER';
+  return {
+    ...record,
+    outcome,
+    correct: outcome === record.committedDirection,
+    open: first.open,
+    close: last.close,
+    resolvedAt: new Date().toISOString(),
+  };
 }
 
 function resolveCommitTimingRecord(record: CommitTimingRecord, candles: MarketSnapshot['candles']): CommitTimingRecord {
@@ -1772,7 +2161,7 @@ function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, co
     {
       label: 'Settlement risk',
       passed: decision.settlement.risk === 'Low',
-      detail: `${decision.settlement.risk}. Clean ENTER needs Low settlement risk in Genesis-020. ${decision.settlement.message}`,
+      detail: `${decision.settlement.risk}. Clean ENTER needs Low settlement risk in Genesis-021. ${decision.settlement.message}`,
       severity: decision.settlement.risk === 'Extreme' || decision.settlement.risk === 'High' ? 'block' : 'warn',
     },
     buildValueGate(direction, countdown, snapshot),
@@ -1804,7 +2193,7 @@ function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, co
 
 function buildLateEntryWarning(decision: Decision, countdown: Countdown) {
   if (countdown.remainingMs > 360000) return null;
-  if (countdown.remainingMs <= 180000) return `Only ${countdown.display} remains. Genesis-020 blocks fresh late entries because the last 3 minutes are too jumpy and the payout is often too small.`;
+  if (countdown.remainingMs <= 180000) return `Only ${countdown.display} remains. Genesis-021 blocks fresh late entries because the last 3 minutes are too jumpy and the payout is often too small.`;
   if (decision.settlement.risk === 'Low' && decision.entryScore >= 82) return null;
   const required = decision.settlement.requiredMove === null ? 'unknown' : `$${decision.settlement.requiredMove.toFixed(0)}`;
   const realistic = decision.settlement.realisticMove === null ? 'unknown' : `$${decision.settlement.realisticMove.toFixed(0)}`;
