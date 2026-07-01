@@ -47,6 +47,7 @@ const COMMITMENT_ACCURACY_STORAGE_KEY = 'edge15.commitmentAccuracy.v3.replay';
 const COMMIT_TIMING_LAB_STORAGE_KEY = 'edge15.commitTimingLab.v1';
 const VERSION_LAB_STORAGE_KEY = 'edge15.versionLab.v1';
 const STRATEGY_PROFILE_LAB_STORAGE_KEY = 'edge15.strategyProfileLab.v1';
+const ADAPTIVE_COMMIT_LAB_STORAGE_KEY = 'edge15.adaptiveCommitLab.v1';
 const DEFAULT_VISIBLE_SECTIONS = {
   aiDesk: false,
   indicators: false,
@@ -189,6 +190,46 @@ type StrategyProfileRecord = {
   note: string;
 };
 
+
+type AdaptiveCommitRecord = {
+  id: string;
+  contractKey: string;
+  capturedAt: string;
+  committedDirection: 'OVER' | 'UNDER' | 'NONE';
+  mode: 'EARLY_CLEAN' | 'VALUE_ZONE' | 'FOUR_MINUTE_CONFIRM' | 'FINAL_EXCEPTION' | 'NO_TRADE';
+  remainingSeconds: number;
+  displayRemaining: string;
+  entryValueLabel: EntryValue['label'];
+  entryValueScore: number;
+  estimatedWinProbability: number | null;
+  askCents: number | null;
+  edgePct: number | null;
+  tradeQualityLabel: TradeQuality['label'];
+  tradeQualityScore: number;
+  confidence: number;
+  opportunity: number;
+  stability: number;
+  entryScore: number;
+  settlementRisk: Decision['settlement']['risk'];
+  flipRisk: FlipRisk['level'];
+  outcome: 'OVER' | 'UNDER' | 'FLAT' | 'UNKNOWN';
+  correct: boolean | null;
+  open: number | null;
+  close: number | null;
+  resolvedAt: string | null;
+  note: string;
+};
+
+type AdaptiveCommitRead = {
+  status: 'Watching' | 'Committed' | 'No Trade';
+  direction: 'OVER' | 'UNDER' | 'NONE';
+  shouldCapture: boolean;
+  mode: AdaptiveCommitRecord['mode'];
+  score: number;
+  reason: string;
+  tone: Tone;
+};
+
 type TrackerStatus = {
   tabStatus: 'Visible' | 'Background';
   tracking: 'Active' | 'Background' | 'Delayed';
@@ -277,6 +318,7 @@ export function GenesisDashboard() {
   const [commitTimingLab, setCommitTimingLab] = useState<CommitTimingRecord[]>([]);
   const [versionLab, setVersionLab] = useState<VersionLabRecord[]>([]);
   const [strategyProfileLab, setStrategyProfileLab] = useState<StrategyProfileRecord[]>([]);
+  const [adaptiveCommitLab, setAdaptiveCommitLab] = useState<AdaptiveCommitRecord[]>([]);
   const [backupStatus, setBackupStatus] = useState<string>('Ready');
   const [lastDataPullAt, setLastDataPullAt] = useState<string | null>(null);
   const [recheckStatus, setRecheckStatus] = useState<string>('Ready');
@@ -318,6 +360,15 @@ export function GenesisDashboard() {
         if (Array.isArray(parsed)) setStrategyProfileLab(parsed.slice(0, 1000));
       } catch {
         window.localStorage.removeItem(STRATEGY_PROFILE_LAB_STORAGE_KEY);
+      }
+    }
+    const savedAdaptiveLab = window.localStorage.getItem(ADAPTIVE_COMMIT_LAB_STORAGE_KEY);
+    if (savedAdaptiveLab) {
+      try {
+        const parsed = JSON.parse(savedAdaptiveLab) as AdaptiveCommitRecord[];
+        if (Array.isArray(parsed)) setAdaptiveCommitLab(parsed.slice(0, 1000));
+      } catch {
+        window.localStorage.removeItem(ADAPTIVE_COMMIT_LAB_STORAGE_KEY);
       }
     }
   }, []);
@@ -526,7 +577,7 @@ export function GenesisDashboard() {
   function buildPerformanceBackup() {
     return {
       app: 'Edge15',
-      release: 'Genesis-023',
+      release: 'Genesis-024',
       exportedAt: new Date().toISOString(),
       storageKeys: {
         commitmentAccuracy: COMMITMENT_ACCURACY_STORAGE_KEY,
@@ -537,11 +588,13 @@ export function GenesisDashboard() {
         commitTimingLab: COMMIT_TIMING_LAB_STORAGE_KEY,
         versionLab: VERSION_LAB_STORAGE_KEY,
         strategyProfileLab: STRATEGY_PROFILE_LAB_STORAGE_KEY,
+        adaptiveCommitLab: ADAPTIVE_COMMIT_LAB_STORAGE_KEY,
       },
       commitmentAccuracy,
       commitTimingLab,
       versionLab,
       strategyProfileLab,
+      adaptiveCommitLab,
       signalPlan,
       journal,
       engineAverages,
@@ -555,12 +608,12 @@ export function GenesisDashboard() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `edge15-genesis-023-performance-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `edge15-genesis-024-performance-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
-    setBackupStatus(`Exported ${commitmentAccuracy.length} performance records and ${commitTimingLab.length} timing tests`);
+    setBackupStatus(`Exported ${commitmentAccuracy.length} performance records and ${commitTimingLab.length} timing tests and ${adaptiveCommitLab.length} adaptive tests`);
   }
 
   function backupToClipboard() {
@@ -595,6 +648,11 @@ export function GenesisDashboard() {
         const restoredStrategyLab = parsed.strategyProfileLab.slice(0, 1000) as StrategyProfileRecord[];
         setStrategyProfileLab(restoredStrategyLab);
         window.localStorage.setItem(STRATEGY_PROFILE_LAB_STORAGE_KEY, JSON.stringify(restoredStrategyLab));
+      }
+      if (Array.isArray(parsed.adaptiveCommitLab)) {
+        const restoredAdaptiveLab = parsed.adaptiveCommitLab.slice(0, 1000) as AdaptiveCommitRecord[];
+        setAdaptiveCommitLab(restoredAdaptiveLab);
+        window.localStorage.setItem(ADAPTIVE_COMMIT_LAB_STORAGE_KEY, JSON.stringify(restoredAdaptiveLab));
       }
       if (parsed.signalPlan) {
         setSignalPlan(parsed.signalPlan as SignalPlan);
@@ -643,6 +701,7 @@ export function GenesisDashboard() {
     let resolvedCommitments = 0;
     let resolvedTiming = 0;
     let resolvedProfiles = 0;
+    let resolvedAdaptive = 0;
     setCommitmentAccuracy((previous) => {
       const next = previous.map((record) => {
         const resolved = resolveCommitmentAccuracyRecord(record, snapshot.candles);
@@ -670,7 +729,16 @@ export function GenesisDashboard() {
       window.localStorage.setItem(STRATEGY_PROFILE_LAB_STORAGE_KEY, JSON.stringify(next));
       return next;
     });
-    setRecheckStatus(`Rechecked pending results: ${resolvedCommitments} commitment, ${resolvedTiming} timing, ${resolvedProfiles} profile updates`);
+    setAdaptiveCommitLab((previous) => {
+      const next = previous.map((record) => {
+        const resolved = resolveAdaptiveCommitRecord(record, snapshot.candles);
+        if (record.correct === null && resolved.correct !== null) resolvedAdaptive += 1;
+        return resolved;
+      });
+      window.localStorage.setItem(ADAPTIVE_COMMIT_LAB_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+    setRecheckStatus(`Rechecked pending results: ${resolvedCommitments} commitment, ${resolvedTiming} timing, ${resolvedProfiles} profile, ${resolvedAdaptive} adaptive updates`);
   }
 
   useEffect(() => {
@@ -747,6 +815,30 @@ export function GenesisDashboard() {
     });
   }, [snapshot.fetchedAt, snapshot.candles, countdown.elapsedMs, countdown.windowStart, decision, snapshot, countdown, flipRisk, now]);
 
+
+  useEffect(() => {
+    if (!snapshot.fetchedAt) return;
+    setAdaptiveCommitLab((previous) => {
+      const nextMap = new Map<string, AdaptiveCommitRecord>();
+      for (const record of previous) {
+        const resolved = resolveAdaptiveCommitRecord(record, snapshot.candles);
+        nextMap.set(record.id, resolved);
+      }
+      const contractKey = `15m:${countdown.windowStart.toISOString()}`;
+      if (!nextMap.has(contractKey)) {
+        const read = buildAdaptiveCommitRead({ decision, activeSignal: signalPlan, countdown, snapshot, entryValue: buildEntryValue(decision, signalPlan, countdown, snapshot, buildTradeQuality(decision, signalPlan, countdown, snapshot, autoTightening, flipRisk), autoTightening, flipRisk, commitTimingLab, strategyProfileLab), tradeQuality: buildTradeQuality(decision, signalPlan, countdown, snapshot, autoTightening, flipRisk), autoTightening, flipRisk });
+        if (read.shouldCapture) {
+          nextMap.set(contractKey, createAdaptiveCommitRecord({ contractKey, read, decision, countdown, snapshot, entryValue: buildEntryValue(decision, signalPlan, countdown, snapshot, buildTradeQuality(decision, signalPlan, countdown, snapshot, autoTightening, flipRisk), autoTightening, flipRisk, commitTimingLab, strategyProfileLab), tradeQuality: buildTradeQuality(decision, signalPlan, countdown, snapshot, autoTightening, flipRisk), flipRisk, now }));
+        }
+      }
+      const next = Array.from(nextMap.values())
+        .sort((a, b) => Date.parse(b.capturedAt) - Date.parse(a.capturedAt))
+        .slice(0, 1000);
+      window.localStorage.setItem(ADAPTIVE_COMMIT_LAB_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, [snapshot.fetchedAt, snapshot.candles, countdown, decision, signalPlan, snapshot, autoTightening, flipRisk, commitTimingLab, strategyProfileLab, now]);
+
   function lockPosition(side: TradeSide) {
     const locked = createLockedPosition(side, snapshot, decision, countdown);
     const journalEntry = createJournalEntry({ side, snapshot, decision, countdown, modelTrust: tradingDesk.modelConfidence });
@@ -789,6 +881,7 @@ export function GenesisDashboard() {
   const activeSignal = signalPlan;
   const tradeQuality = useMemo(() => buildTradeQuality(decision, activeSignal, countdown, snapshot, autoTightening, flipRisk), [decision, activeSignal, countdown, snapshot, autoTightening, flipRisk]);
   const entryValue = useMemo(() => buildEntryValue(decision, activeSignal, countdown, snapshot, tradeQuality, autoTightening, flipRisk, commitTimingLab, strategyProfileLab), [decision, activeSignal, countdown, snapshot, tradeQuality, autoTightening, flipRisk, commitTimingLab, strategyProfileLab]);
+  const adaptiveCommitRead = useMemo(() => buildAdaptiveCommitRead({ decision, activeSignal, countdown, snapshot, entryValue, tradeQuality, autoTightening, flipRisk }), [decision, activeSignal, countdown, snapshot, entryValue, tradeQuality, autoTightening, flipRisk]);
   const entryGates = useMemo(() => buildEntryGates(decision, activeSignal, countdown, qualityFilter, snapshot, autoTightening, flipRisk, tradeQuality), [decision, activeSignal, countdown, qualityFilter, snapshot, autoTightening, flipRisk, tradeQuality]);
   const lateWarning = useMemo(() => buildLateEntryWarning(decision, countdown), [decision, countdown]);
   const contradiction = useMemo(() => buildContradictionAlert(decision, activeSignal, countdown), [decision, activeSignal, countdown]);
@@ -805,13 +898,14 @@ export function GenesisDashboard() {
     commitmentAccuracy,
     commitTimingLab,
     strategyProfileLab,
-  }), [tabStatus, lastDataPullAt, activeSignal, countdown, commitmentAccuracy, commitTimingLab, strategyProfileLab]);
+    adaptiveCommitLab,
+  }), [tabStatus, lastDataPullAt, activeSignal, countdown, commitmentAccuracy, commitTimingLab, strategyProfileLab, adaptiveCommitLab]);
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-023</div>
+          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-024</div>
           <h1 className="text-3xl font-black tracking-tight">Edge15</h1>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -870,6 +964,8 @@ export function GenesisDashboard() {
         <EntryValuePanel value={entryValue} />
         <EarlyEntryLabPanel entryValue={entryValue} timingRecords={commitTimingLab} profileRecords={strategyProfileLab} countdown={countdown} />
       </section>
+
+      <AdaptiveCommitLabPanel records={adaptiveCommitLab} currentRead={adaptiveCommitRead} countdown={countdown} />
 
       <CommitTimingLabPanel records={commitTimingLab} countdown={countdown} />
       <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
@@ -993,12 +1089,12 @@ export function GenesisDashboard() {
       ) : null}
 
       {visibleSections.genesisStatus ? (
-        <Panel title="Genesis-023 status">
+        <Panel title="Genesis-024 status">
           <ul className="list-disc space-y-2 pl-5 text-sm text-edge-muted">
             <li>Commitment Accuracy Tracker grades Edge15's locked contract predictions for the last 10 completed windows.</li>
             <li>Market microstructure now uses Coinbase level-2 order book spread, depth, and imbalance as another professional-style data read.</li>
-            <li>Genesis-023 changes the live commitment checkpoint to 8:00 remaining for testing.</li>
-            <li>Genesis-023 preserves the Genesis-017/022 guardrails and tests an 8:00-left live commitment point.</li>
+            <li>Genesis-024 changes the live commitment checkpoint to 8:00 remaining for testing.</li>
+            <li>Genesis-024 preserves the Genesis-017/022 guardrails and tests an 8:00-left live commitment point.</li>
           </ul>
         </Panel>
       ) : null}
@@ -1194,7 +1290,7 @@ function StrategyProfileLabPanel({ records }: { records: StrategyProfileRecord[]
       <div className="grid gap-3 sm:grid-cols-3">
         <Metric label="Best Profile" value={best ? best.label : 'Collecting'} detail={best ? `${best.winRate}% • ${best.wins}-${best.losses}` : 'Need 5+ scored'} help="Shadow-tests trading styles once per window. It does not change the live recommendation." tone={best && (best.winRate ?? 0) >= 75 ? 'good' : 'blue'} />
         <Metric label="Profiles" value={`${STRATEGY_PROFILES.length}`} detail="Shadow tested" help="Aggressive, balanced, selective, ultra-selective, value-only, and no-chase profiles are graded separately." tone="neutral" />
-        <Metric label="Live Logic" value="8m Test" detail="Experimental commit timing" help="Genesis-023 tests an 8:00-left commitment while keeping the Genesis-017/020 guardrails active." tone="blue" />
+        <Metric label="Live Logic" value="8m Test" detail="Experimental commit timing" help="Genesis-024 tests an 8:00-left live commitment while keeping the Genesis-017/020 guardrails active." tone="blue" />
       </div>
       <div className="mt-4 overflow-hidden rounded-2xl border border-edge-line">
         <div className="grid grid-cols-[96px_72px_64px_74px_1fr] gap-2 bg-black/30 px-3 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-edge-muted">
@@ -1255,7 +1351,7 @@ function PerformanceBackupPanel({
   return (
     <Panel title="Backup + compare">
       <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-        <Metric label="Current version" value="Genesis-023" detail="8m test" help="Genesis-023 preserves the core Genesis-017 guardrails but tests an 8:00-left live commit. It protects your results and makes side-by-side testing easier." tone="blue" />
+        <Metric label="Current version" value="Genesis-024" detail="adaptive lab" help="Genesis-024 preserves the Genesis-023 live 8:00 test and adds an adaptive commit shadow lab. It protects your results and makes side-by-side testing easier." tone="blue" />
         <Metric label="All-time read" value={bestLabel} detail={allTime.winRate === null ? 'No scored records' : `${allTime.winRate}% • ${allTime.wins}-${allTime.losses}`} help="Quick version-comparison label from this browser's stored performance records." tone={bestTone} />
         <Metric label="Last hour" value={recent.winRate === null ? '—' : `${recent.winRate}%`} detail={`W/L ${recent.wins}-${recent.losses}`} help="Useful when comparing multiple Genesis versions side by side over the same test window." tone={recent.winRate === null ? 'neutral' : recent.winRate >= 75 ? 'good' : recent.winRate >= 60 ? 'warn' : 'bad'} />
       </div>
@@ -1280,7 +1376,7 @@ function TradeQualityPanel({ quality, autoTightening, flipRisk }: { quality: Tra
         <Metric label="Late Flip Risk" value={flipRisk.level} detail={`${flipRisk.flips} recent flips`} help={flipRisk.message} tone={flipRisk.tone} />
       </div>
       <div className="mt-3 rounded-2xl border border-edge-line bg-black/20 p-3 text-xs leading-5 text-edge-muted">
-        Genesis-023 uses this score as the cockpit read: prediction strength is not enough unless value, stability, flip risk, and recent model performance are acceptable.
+        Genesis-024 uses this score as the cockpit read: prediction strength is not enough unless value, stability, flip risk, and recent model performance are acceptable.
       </div>
     </Panel>
   );
@@ -1302,7 +1398,7 @@ function TradeReplayPanel({ records }: { records: CommitmentAccuracyRecord[] }) 
           </div>
         ))}
       </div>
-      <div className="mt-3 text-xs leading-5 text-edge-muted">Replay records help identify bad setups without manual buttons. Older records may not have every Genesis-023 snapshot field until new commitments are created.</div>
+      <div className="mt-3 text-xs leading-5 text-edge-muted">Replay records help identify bad setups without manual buttons. Older records may not have every Genesis-024 snapshot field until new commitments are created.</div>
     </Panel>
   );
 }
@@ -1455,7 +1551,7 @@ function TrackerStatusPanel({ status, recheckStatus, onRecheck }: { status: Trac
   );
 }
 
-function buildTrackerStatus({ tabStatus, lastDataPullAt, signalPlan, countdown, commitmentAccuracy, commitTimingLab, strategyProfileLab }: { tabStatus: 'Visible' | 'Background'; lastDataPullAt: string | null; signalPlan: SignalPlan | null; countdown: Countdown; commitmentAccuracy: CommitmentAccuracyRecord[]; commitTimingLab: CommitTimingRecord[]; strategyProfileLab: StrategyProfileRecord[] }): TrackerStatus {
+function buildTrackerStatus({ tabStatus, lastDataPullAt, signalPlan, countdown, commitmentAccuracy, commitTimingLab, strategyProfileLab, adaptiveCommitLab }: { tabStatus: 'Visible' | 'Background'; lastDataPullAt: string | null; signalPlan: SignalPlan | null; countdown: Countdown; commitmentAccuracy: CommitmentAccuracyRecord[]; commitTimingLab: CommitTimingRecord[]; strategyProfileLab: StrategyProfileRecord[]; adaptiveCommitLab: AdaptiveCommitRecord[] }): TrackerStatus {
   const nowMs = Date.now();
   const pullMs = lastDataPullAt ? Date.parse(lastDataPullAt) : NaN;
   const secondsSincePull = Number.isFinite(pullMs) ? Math.round((nowMs - pullMs) / 1000) : null;
@@ -1464,11 +1560,12 @@ function buildTrackerStatus({ tabStatus, lastDataPullAt, signalPlan, countdown, 
   const currentWindowCaptured = signalPlan?.contractKey === currentKey && (signalPlan.commitmentStatus === 'COMMITTED' || signalPlan.commitmentStatus === 'NO TRADE');
   const timingCaptured = commitTimingLab.filter((record) => record.contractKey === currentKey).length;
   const pendingCommitments = commitmentAccuracy.filter((record) => record.committedDirection !== 'NONE' && record.correct === null).length;
-  const pendingTiming = commitTimingLab.filter((record) => record.committedDirection !== 'NONE' && record.correct === null).length + strategyProfileLab.filter((record) => record.committedDirection !== 'NONE' && record.correct === null).length;
+  const pendingTiming = commitTimingLab.filter((record) => record.committedDirection !== 'NONE' && record.correct === null).length + strategyProfileLab.filter((record) => record.committedDirection !== 'NONE' && record.correct === null).length + adaptiveCommitLab.filter((record) => record.committedDirection !== 'NONE' && record.correct === null).length;
   const gradedTimes = [
     ...commitmentAccuracy.filter((record) => record.correct !== null).map((record) => Date.parse(record.resolvedAt)),
     ...commitTimingLab.filter((record) => record.correct !== null && record.resolvedAt).map((record) => Date.parse(record.resolvedAt as string)),
     ...strategyProfileLab.filter((record) => record.correct !== null && record.resolvedAt).map((record) => Date.parse(record.resolvedAt as string)),
+    ...adaptiveCommitLab.filter((record) => record.correct !== null && record.resolvedAt).map((record) => Date.parse(record.resolvedAt as string)),
   ].filter(Number.isFinite) as number[];
   const lastGradedAt = gradedTimes.length ? new Date(Math.max(...gradedTimes)).toISOString() : null;
   const message = tracking === 'Active'
@@ -1486,7 +1583,7 @@ function buildTrackerStatus({ tabStatus, lastDataPullAt, signalPlan, countdown, 
     pendingTiming,
     lastDataPullAt,
     lastGradedAt,
-    recordsStored: commitmentAccuracy.length + commitTimingLab.length + strategyProfileLab.length,
+    recordsStored: commitmentAccuracy.length + commitTimingLab.length + strategyProfileLab.length + adaptiveCommitLab.length,
     message,
   };
 }
@@ -1539,7 +1636,7 @@ function EarlyEntryLabPanel({ entryValue, timingRecords, profileRecords, countdo
   return (
     <Panel title="Early Entry Lab">
       <div className="grid gap-3 sm:grid-cols-4">
-        <Metric label="Current Phase" value={currentPhase} detail={countdown.display} help="Genesis-023 live mode is testing the 8:00-left commitment point while value evidence builds." tone="blue" />
+        <Metric label="Current Phase" value={currentPhase} detail={countdown.display} help="Genesis-024 live mode is testing the 8:00-left live commitment point while value evidence builds." tone="blue" />
         <Metric label="Clean Early" value={cleanEarlyArmed ? 'ARMED' : 'WAIT'} detail={entryValue.label} help="ARMED means Edge15 sees enough value to consider the 8:00-left test point cleaner than waiting." tone={cleanEarlyArmed ? 'good' : 'warn'} />
         <Metric label="Best Early Slot" value={bestEarly ? bestEarly.label : 'Collecting'} detail={bestEarly ? `${bestEarly.winRate ?? '—'}% • edge ${bestEarly.valueEdge === null ? '—' : bestEarly.valueEdge}` : 'Need 5+ scored'} help="Compares 10:00, 8:00, and 6:00 checkpoints for early value opportunities." tone={bestEarly && bestEarly.valueScore >= 65 ? 'good' : 'blue'} />
         <Metric label="4m vs 3m" value={fourMinute && threeMinute ? `${fourMinute.winRate ?? '—'} / ${threeMinute.winRate ?? '—'}%` : 'Collecting'} detail="accuracy check" help="4:00 may be the best usable balance; 3:00 may be accurate but too late/expensive without strong value." tone="warn" />
@@ -1562,7 +1659,7 @@ function EarlyEntryLabPanel({ entryValue, timingRecords, profileRecords, countdo
         ))}
       </div>
       <div className="mt-3 rounded-2xl border border-edge-blue/30 bg-edge-blue/10 p-3 text-xs leading-5 text-edge-blue">
-        Genesis-023 actively tests the 8:00-left commitment point while continuing to observe early-entry value. It still uses NO TRADE when value, quality, or stability are not clean enough.
+        Genesis-024 actively tests the 8:00-left live commitment point while continuing to observe early-entry value. It still uses NO TRADE when value, quality, or stability are not clean enough.
       </div>
     </Panel>
   );
@@ -1636,7 +1733,7 @@ function buildEntryValue(decision: Decision, activeSignal: SignalPlan | null, co
     ? `${askRead} Edge15 should avoid paying for this unless value improves.${lateRead}`
     : label === 'FAIR'
       ? `${askRead} This is watchable, but not clean enough to treat as a premium entry.${lateRead}`
-      : `${askRead} This is the type of price-versus-probability setup Genesis-023 is designed to track.${lateRead}`;
+      : `${askRead} This is the type of price-versus-probability setup Genesis-024 is designed to track.${lateRead}`;
 
   return {
     label,
@@ -1663,6 +1760,185 @@ function clampLocal(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+
+function AdaptiveCommitLabPanel({ records, currentRead, countdown }: { records: AdaptiveCommitRecord[]; currentRead: AdaptiveCommitRead; countdown: Countdown }) {
+  const summary = buildAdaptiveCommitSummary(records);
+  const recent = records.slice(0, 6);
+  const currentKey = `15m:${countdown.windowStart.toISOString()}`;
+  const currentRecord = records.find((record) => record.contractKey === currentKey) ?? null;
+  const statusTone: Tone = currentRecord?.committedDirection === 'OVER' || currentRecord?.committedDirection === 'UNDER'
+    ? 'good'
+    : currentRecord?.committedDirection === 'NONE'
+      ? 'neutral'
+      : currentRead.tone;
+
+  return (
+    <Panel title="Adaptive Commit Lab">
+      <div className="grid gap-3 sm:grid-cols-4">
+        <Metric label="Adaptive Read" value={currentRecord ? currentRecord.committedDirection === 'NONE' ? 'NO TRADE' : currentRecord.committedDirection : currentRead.status} detail={currentRecord ? currentRecord.displayRemaining : `${currentRead.mode.replaceAll('_', ' ')}`} help="Shadow mode only. This tests when Edge15 would commit if it waited for quality/value readiness instead of a fixed clock time." tone={statusTone} />
+        <Metric label="Adaptive Score" value={`${currentRead.score}/100`} detail={currentRead.shouldCapture ? 'Capture now' : 'Watching'} help={currentRead.reason} tone={currentRead.tone} />
+        <Metric label="Adaptive W/L" value={`${summary.wins}-${summary.losses}`} detail={summary.winRate === null ? 'No scored yet' : `${summary.winRate}% win rate`} help="Only adaptive OVER/UNDER shadow commits are counted in win rate. Adaptive NO TRADE is tracked separately." tone={summary.winRate === null ? 'neutral' : summary.winRate >= 80 ? 'good' : summary.winRate >= 65 ? 'warn' : 'bad'} />
+        <Metric label="No Trades" value={`${summary.noTrades}`} detail={`${summary.resolved} scored`} help="Adaptive NO TRADE means the lab decided no clean value/timing setup appeared before the final no-chase zone." tone="blue" />
+      </div>
+      <div className={`mt-3 rounded-2xl border p-3 text-xs leading-5 ${badgeClass(currentRead.tone)}`}>{highlightText(currentRecord ? currentRecord.note : currentRead.reason)}</div>
+      <div className="mt-4 overflow-hidden rounded-2xl border border-edge-line">
+        <div className="grid grid-cols-[92px_72px_76px_88px_1fr] gap-2 bg-black/30 px-3 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-edge-muted">
+          <div>When</div><div>Pick</div><div>Result</div><div>Value</div><div>Why</div>
+        </div>
+        {recent.length ? recent.map((record) => (
+          <div key={record.id} className="grid grid-cols-[92px_72px_76px_88px_1fr] gap-2 border-t border-edge-line px-3 py-2 text-xs">
+            <div className="font-black text-slate-100">{record.displayRemaining}</div>
+            <div className={record.committedDirection === 'OVER' ? 'font-black text-edge-green' : record.committedDirection === 'UNDER' ? 'font-black text-edge-red' : 'font-black text-edge-muted'}>{record.committedDirection}</div>
+            <div className={record.correct === true ? 'font-black text-edge-green' : record.correct === false ? 'font-black text-edge-red' : 'text-edge-muted'}>{record.correct === true ? 'WIN' : record.correct === false ? 'LOSS' : record.committedDirection === 'NONE' ? 'SKIP' : 'PEND'}</div>
+            <div className="text-edge-muted">{record.entryValueLabel} {record.askCents === null ? '' : `${record.askCents}¢`}</div>
+            <div className="text-edge-muted">{record.mode.replaceAll('_', ' ')} • {record.note}</div>
+          </div>
+        )) : <div className="border-t border-edge-line px-3 py-4 text-sm text-edge-muted">Waiting for the first adaptive shadow decision. It may commit early, wait into the value zone, or record NO TRADE before the final no-chase area.</div>}
+      </div>
+      <div className="mt-3 rounded-2xl border border-edge-blue/30 bg-edge-blue/10 p-3 text-xs leading-5 text-edge-blue">
+        Genesis-024 does not promote adaptive commits to live mode yet. It compares fixed 8:00 live testing against a shadow engine that can commit when the setup becomes ready.
+      </div>
+    </Panel>
+  );
+}
+
+function buildAdaptiveCommitSummary(records: AdaptiveCommitRecord[]) {
+  const scored = records.filter((record) => record.correct !== null);
+  const wins = scored.filter((record) => record.correct === true).length;
+  const losses = scored.filter((record) => record.correct === false).length;
+  const noTrades = records.filter((record) => record.committedDirection === 'NONE').length;
+  const resolved = wins + losses;
+  const winRate = resolved ? Math.round((wins / resolved) * 100) : null;
+  const avgRemaining = records.length ? Math.round(records.reduce((sum, record) => sum + record.remainingSeconds, 0) / records.length) : null;
+  return { wins, losses, noTrades, resolved, winRate, avgRemaining };
+}
+
+function buildAdaptiveCommitRead({ decision, activeSignal, countdown, snapshot, entryValue, tradeQuality, autoTightening, flipRisk }: { decision: Decision; activeSignal: SignalPlan | null; countdown: Countdown; snapshot: MarketSnapshot; entryValue: EntryValue; tradeQuality: TradeQuality; autoTightening: AutoTighteningProfile; flipRisk: FlipRisk }): AdaptiveCommitRead {
+  const side = entryValue.side === 'OVER' || entryValue.side === 'UNDER' ? entryValue.side : activeSignal?.direction ?? decision.direction;
+  const elapsedMs = countdown.elapsedMs;
+  const remainingMs = countdown.remainingMs;
+  const score = adaptiveReadinessScore({ decision, countdown, entryValue, tradeQuality, autoTightening, flipRisk });
+
+  if (side !== 'OVER' && side !== 'UNDER') {
+    if (remainingMs <= 180000) {
+      return { status: 'No Trade', direction: 'NONE', shouldCapture: true, mode: 'NO_TRADE', score, tone: 'neutral', reason: 'Adaptive lab reached the final no-chase zone without a directional OVER or UNDER edge. It records NO TRADE instead of forcing a side.' };
+    }
+    return { status: 'Watching', direction: 'NONE', shouldCapture: false, mode: 'NO_TRADE', score, tone: 'neutral', reason: 'Adaptive lab is watching. No directional edge is formed yet.' };
+  }
+
+  const ask = side === 'OVER' ? snapshot.kalshi?.yesAsk ?? null : snapshot.kalshi?.noAsk ?? null;
+  const riskBlocked = decision.settlement.risk === 'Extreme' || flipRisk.level === 'High' || (decision.settlement.risk === 'High' && remainingMs <= 300000);
+  const wrongSide = side === 'OVER'
+    ? decision.distanceToReference !== null && decision.distanceToReference < -8
+    : decision.distanceToReference !== null && decision.distanceToReference > 8;
+
+  if (elapsedMs < 5 * 60 * 1000) {
+    return { status: 'Watching', direction: side, shouldCapture: false, mode: 'EARLY_CLEAN', score, tone: 'blue', reason: `Adaptive lab will not commit before 10:00 left. It is still scouting ${side}.` };
+  }
+
+  if (remainingMs <= 180000) {
+    const exceptional = entryValue.label === 'GREAT' && tradeQuality.label === 'STRONG' && score >= 88 && !riskBlocked && !wrongSide && (ask === null || ask <= 74);
+    if (exceptional) {
+      return { status: 'Committed', direction: side, shouldCapture: true, mode: 'FINAL_EXCEPTION', score, tone: 'good', reason: `Adaptive lab would make a rare final-window ${side} commit because value is exceptional and risk gates are still clean.` };
+    }
+    return { status: 'No Trade', direction: 'NONE', shouldCapture: true, mode: 'NO_TRADE', score, tone: 'neutral', reason: 'Adaptive lab reached the final 3 minutes without enough value to justify a fresh entry. It records NO TRADE.' };
+  }
+
+  if (riskBlocked || wrongSide) {
+    return { status: 'Watching', direction: side, shouldCapture: false, mode: 'NO_TRADE', score, tone: 'warn', reason: `Adaptive lab is waiting: ${riskBlocked ? 'risk/flip gates are not clean' : `${side} is on the wrong side of the reference`}.` };
+  }
+
+  if (remainingMs > 8 * 60 * 1000) {
+    const earlyClean = tradeQuality.label === 'STRONG' && (entryValue.label === 'GOOD' || entryValue.label === 'GREAT') && score >= 82 && decision.confidence >= 68 && decision.stability >= 66;
+    if (earlyClean) {
+      return { status: 'Committed', direction: side, shouldCapture: true, mode: 'EARLY_CLEAN', score, tone: 'good', reason: `Adaptive lab would commit ${side} early because Trade Quality is STRONG and Entry Value is ${entryValue.label} before the fixed 8:00 test point.` };
+    }
+    return { status: 'Watching', direction: side, shouldCapture: false, mode: 'EARLY_CLEAN', score, tone: 'blue', reason: `Adaptive lab sees ${side}, but early evidence is not clean enough yet. It is waiting for value plus stability.` };
+  }
+
+  if (remainingMs > 4 * 60 * 1000) {
+    const valueZoneReady = score >= 74 && tradeQuality.label !== 'AVOID' && tradeQuality.label !== 'WEAK' && entryValue.label !== 'BAD' && decision.confidence >= 60 && decision.stability >= 58;
+    if (valueZoneReady) {
+      return { status: 'Committed', direction: side, shouldCapture: true, mode: 'VALUE_ZONE', score, tone: 'good', reason: `Adaptive lab would commit ${side} in the 8:00–4:00 value zone because quality, stability, and entry value lined up.` };
+    }
+    return { status: 'Watching', direction: side, shouldCapture: false, mode: 'VALUE_ZONE', score, tone: 'warn', reason: `Adaptive lab is inside the value zone but not ready. It wants better quality or price before committing ${side}.` };
+  }
+
+  const fourMinuteReady = score >= 72 && tradeQuality.label === 'STRONG' && entryValue.label !== 'BAD' && decision.settlement.risk === 'Low';
+  if (fourMinuteReady) {
+    return { status: 'Committed', direction: side, shouldCapture: true, mode: 'FOUR_MINUTE_CONFIRM', score, tone: 'good', reason: `Adaptive lab would commit ${side} near 4:00 because the timing-lab data says this zone has been the strongest usable confirmation area.` };
+  }
+
+  return { status: 'Watching', direction: side, shouldCapture: false, mode: 'FOUR_MINUTE_CONFIRM', score, tone: 'warn', reason: `Adaptive lab is waiting near 4:00. If the setup does not clean up before 3:00, it will record NO TRADE.` };
+}
+
+function adaptiveReadinessScore({ decision, countdown, entryValue, tradeQuality, autoTightening, flipRisk }: { decision: Decision; countdown: Countdown; entryValue: EntryValue; tradeQuality: TradeQuality; autoTightening: AutoTighteningProfile; flipRisk: FlipRisk }) {
+  const valueBonus = entryValue.label === 'GREAT' ? 16 : entryValue.label === 'GOOD' ? 10 : entryValue.label === 'FAIR' ? 3 : -14;
+  const qualityBonus = tradeQuality.label === 'STRONG' ? 10 : tradeQuality.label === 'DECENT' ? 4 : tradeQuality.label === 'WEAK' ? -8 : -18;
+  const flipPenalty = flipRisk.level === 'High' ? 18 : flipRisk.level === 'Medium' ? 8 : 0;
+  const riskPenalty = decision.settlement.risk === 'Extreme' ? 24 : decision.settlement.risk === 'High' ? 16 : decision.settlement.risk === 'Medium' ? 6 : 0;
+  const tightPenalty = autoTightening.mode === 'MAX' ? 8 : autoTightening.mode === 'STRICT' ? 4 : 0;
+  const timeBonus = countdown.remainingMs <= 8 * 60 * 1000 && countdown.remainingMs >= 4 * 60 * 1000 ? 5 : countdown.remainingMs < 3 * 60 * 1000 ? -12 : 0;
+  return Math.round(clampLocal(decision.confidence * 0.28 + decision.opportunity * 0.22 + decision.stability * 0.18 + decision.entryScore * 0.18 + entryValue.score * 0.14 + valueBonus + qualityBonus + timeBonus - flipPenalty - riskPenalty - tightPenalty, 0, 100));
+}
+
+function createAdaptiveCommitRecord({ contractKey, read, decision, countdown, snapshot, entryValue, tradeQuality, flipRisk, now }: { contractKey: string; read: AdaptiveCommitRead; decision: Decision; countdown: Countdown; snapshot: MarketSnapshot; entryValue: EntryValue; tradeQuality: TradeQuality; flipRisk: FlipRisk; now: Date }): AdaptiveCommitRecord {
+  return {
+    id: contractKey,
+    contractKey,
+    capturedAt: now.toISOString(),
+    committedDirection: read.direction,
+    mode: read.mode,
+    remainingSeconds: Math.round(countdown.remainingMs / 1000),
+    displayRemaining: countdown.display,
+    entryValueLabel: entryValue.label,
+    entryValueScore: entryValue.score,
+    estimatedWinProbability: entryValue.estimatedWinProbability,
+    askCents: entryValue.askCents,
+    edgePct: entryValue.edgePct,
+    tradeQualityLabel: tradeQuality.label,
+    tradeQualityScore: tradeQuality.score,
+    confidence: decision.confidence,
+    opportunity: decision.opportunity,
+    stability: decision.stability,
+    entryScore: decision.entryScore,
+    settlementRisk: decision.settlement.risk,
+    flipRisk: flipRisk.level,
+    outcome: 'UNKNOWN',
+    correct: null,
+    open: null,
+    close: null,
+    resolvedAt: null,
+    note: read.reason,
+  };
+}
+
+function resolveAdaptiveCommitRecord(record: AdaptiveCommitRecord, candles: MarketSnapshot['candles']): AdaptiveCommitRecord {
+  if (record.correct !== null || record.committedDirection === 'NONE') {
+    if (record.committedDirection === 'NONE' && record.resolvedAt === null) return { ...record, resolvedAt: new Date().toISOString() };
+    return record;
+  }
+  const startIso = record.contractKey.replace('15m:', '');
+  const startMs = Date.parse(startIso);
+  if (!Number.isFinite(startMs)) return record;
+  const endMs = startMs + 15 * 60 * 1000;
+  if (Date.now() < endMs + 5000) return record;
+  const windowCandles = candles.slice().sort((a, b) => a.time - b.time).filter((c) => c.time >= startMs && c.time < endMs);
+  if (windowCandles.length < 2) return record;
+  const first = windowCandles[0];
+  const last = windowCandles[windowCandles.length - 1];
+  const change = last.close - first.open;
+  const outcome: AdaptiveCommitRecord['outcome'] = Math.abs(change) < 0.01 ? 'FLAT' : change > 0 ? 'OVER' : 'UNDER';
+  return {
+    ...record,
+    outcome,
+    correct: outcome === record.committedDirection,
+    open: first.open,
+    close: last.close,
+    resolvedAt: new Date().toISOString(),
+  };
+}
+
 function CommitTimingLabPanel({ records, countdown }: { records: CommitTimingRecord[]; countdown: Countdown }) {
   const rows = buildTimingLabRows(records);
   const currentKey = `15m:${countdown.windowStart.toISOString()}`;
@@ -1685,7 +1961,7 @@ function CommitTimingLabPanel({ records, countdown }: { records: CommitTimingRec
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="text-sm leading-6 text-slate-200">Shadow-tests decision checkpoints without changing live trading logic.</div>
-              <div className="mt-1 text-xs leading-5 text-edge-muted">Genesis-023 now shows timing value, not just accuracy. A perfect late read can still be a bad entry if the ask is too expensive.</div>
+              <div className="mt-1 text-xs leading-5 text-edge-muted">Genesis-024 now shows timing value, not just accuracy. A perfect late read can still be a bad entry if the ask is too expensive.</div>
             </div>
             <div className="rounded-full border border-edge-blue/40 bg-edge-blue/10 px-3 py-1 text-xs font-black text-edge-blue">
               Live logic unchanged
@@ -1733,7 +2009,7 @@ function CommitTimingLabPanel({ records, countdown }: { records: CommitTimingRec
             </div>
           </div>
           <div className="rounded-2xl border border-edge-amber/30 bg-edge-amber/10 p-3 text-xs leading-5 text-edge-amber">
-            Early checkpoints can pay better but need cleaner signal. Late checkpoints may predict better but often have weak payout. Genesis-023 starts measuring both sides of that tradeoff.
+            Early checkpoints can pay better but need cleaner signal. Late checkpoints may predict better but often have weak payout. Genesis-024 starts measuring both sides of that tradeoff.
           </div>
         </div>
       </div>
@@ -2372,7 +2648,7 @@ function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, co
     {
       label: 'Settlement risk',
       passed: decision.settlement.risk === 'Low',
-      detail: `${decision.settlement.risk}. Clean ENTER needs Low settlement risk in Genesis-023. ${decision.settlement.message}`,
+      detail: `${decision.settlement.risk}. Clean ENTER needs Low settlement risk in Genesis-024. ${decision.settlement.message}`,
       severity: decision.settlement.risk === 'Extreme' || decision.settlement.risk === 'High' ? 'block' : 'warn',
     },
     buildValueGate(direction, countdown, snapshot),
@@ -2404,7 +2680,7 @@ function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, co
 
 function buildLateEntryWarning(decision: Decision, countdown: Countdown) {
   if (countdown.remainingMs > 360000) return null;
-  if (countdown.remainingMs <= 180000) return `Only ${countdown.display} remains. Genesis-023 blocks fresh late entries because the last 3 minutes are too jumpy and the payout is often too small.`;
+  if (countdown.remainingMs <= 180000) return `Only ${countdown.display} remains. Genesis-024 blocks fresh late entries because the last 3 minutes are too jumpy and the payout is often too small.`;
   if (decision.settlement.risk === 'Low' && decision.entryScore >= 82) return null;
   const required = decision.settlement.requiredMove === null ? 'unknown' : `$${decision.settlement.requiredMove.toFixed(0)}`;
   const realistic = decision.settlement.realisticMove === null ? 'unknown' : `$${decision.settlement.realisticMove.toFixed(0)}`;
