@@ -14,7 +14,7 @@ const STATUS_RANK: Record<SignalStatus, number> = {
 };
 
 export const SIGNAL_PLAN_STORAGE_KEY = 'edge15.signalPlan.v2.commitment';
-const COMMIT_AFTER_MS = 9 * 60 * 1000;
+const COMMIT_AFTER_MS = 7 * 60 * 1000;
 
 export function contractKeyFromCountdown(windowStartIso: string) {
   return `15m:${windowStartIso}`;
@@ -32,7 +32,7 @@ export function updateSignalPlan({ previous, decision, countdown, now }: SignalP
     return maybeCommit(created, decision, countdown, nowIso);
   }
 
-  // Once Edge15 commits after minute 9, the prediction side stays fixed for the
+  // Once Edge15 commits at the 8:00-left test point, the prediction side stays fixed for the
   // rest of the contract. The display may move to HOLD/CAUTION/DANGER-style
   // management, but the committed answer does not flip.
   if (previous.commitmentStatus === 'COMMITTED') {
@@ -153,7 +153,7 @@ function createPlan(contractKey: string, direction: Decision['direction'], rawSt
     commitmentStatus: 'SCOUTING',
     committedDirection: 'NONE',
     committedAt: null,
-    commitmentReason: 'Scout Mode: Edge15 has not reached the minute-9 commitment point yet.',
+    commitmentReason: 'Scout Mode: Edge15 has not reached the 8:00-left test commitment point yet.',
     committedEntryScore: null,
     committedConfidence: null,
     committedTradeGrade: null,
@@ -171,7 +171,7 @@ function maybeCommit(plan: SignalPlan, decision: Decision, countdown: SignalPlan
       commitmentStatus: 'SCOUTING',
       committedDirection: 'NONE',
       committedAt: null,
-      commitmentReason: `Scout Mode until minute 9. Edge15 is gathering evidence and will not lock the contract prediction yet.`,
+      commitmentReason: `Scout Mode until 8:00 left. Edge15 is gathering evidence and will not lock the contract prediction yet.`,
     }, decision, countdown);
   }
 
@@ -192,7 +192,7 @@ function maybeCommit(plan: SignalPlan, decision: Decision, countdown: SignalPlan
       commitmentStatus: 'NO TRADE',
       committedDirection: 'NONE',
       committedAt: nowIso,
-      commitmentReason: `Minute-9 commitment check did not find a clean, protected edge. Edge15 is intentionally sitting this contract out instead of forcing a side.`,
+      commitmentReason: `8:00-left commitment test did not find a clean, protected edge. Edge15 is intentionally sitting this contract out instead of forcing a side.`,
       committedEntryScore: decision.entryScore,
       committedConfidence: decision.confidence,
       committedTradeGrade: decision.tradeGrade,
@@ -213,7 +213,7 @@ function maybeCommit(plan: SignalPlan, decision: Decision, countdown: SignalPlan
     commitmentStatus: 'COMMITTED',
     committedDirection,
     committedAt: nowIso,
-    commitmentReason: `At the minute-9 commitment check, Edge15 locked ${committedDirection}. The prediction side will not flip for the rest of this 15-minute contract; only the management status can change.`,
+    commitmentReason: `At the 8:00-left commitment test, Edge15 locked ${committedDirection}. The prediction side will not flip for the rest of this 15-minute contract; only the management status can change.`,
     committedEntryScore: decision.entryScore,
     committedConfidence: decision.confidence,
     committedTradeGrade: decision.tradeGrade,
@@ -320,13 +320,13 @@ function withNarrative(plan: SignalPlan, decision: Decision, countdown: SignalPl
   const confirmationText = plan.confirmations <= 0 ? 'no confirmations yet' : `${plan.confirmations} confirmation point${plan.confirmations === 1 ? '' : 's'}`;
 
   let planText = `${dirText}. Signal quality is ${stableText} with ${confirmationText}. Edge15 will not flip directions on a single refresh; it will hold, caution, or cancel the plan only if evidence changes enough.`;
-  if (plan.commitmentStatus === 'SCOUTING') planText = `Scout Mode: Edge15 is watching the opening 9 minutes. No final contract prediction is locked yet.`;
-  if (plan.commitmentStatus === 'NO TRADE') planText = `No Trade is committed for this contract. Edge15 did not see enough edge at the minute-9 check.`;
+  if (plan.commitmentStatus === 'SCOUTING') planText = `Scout Mode: Edge15 is watching the opening 7 minutes. No final contract prediction is locked yet.`;
+  if (plan.commitmentStatus === 'NO TRADE') planText = `No Trade is committed for this contract. Edge15 did not see enough edge at the 8:00-left test.`;
   if (plan.commitmentStatus === 'COMMITTED') planText = `${plan.committedDirection} is the committed prediction for this contract. Edge15 will keep this side fixed and only change the management status if risk rises.`;
   if (plan.status === 'ENTER' && plan.commitmentStatus !== 'COMMITTED') planText = `${direction} signal is confirmed. This is the first status where Edge15 considers the entry plan actionable.`;
   if (plan.status === 'READY' && plan.commitmentStatus !== 'COMMITTED') planText = `${direction} signal is nearly confirmed. Edge15 is waiting for one more stable push before calling ENTER.`;
   if (plan.status === 'CAUTION' && plan.commitmentStatus !== 'COMMITTED') planText = `${direction} plan is under pressure. Edge15 is not flipping yet, but the opposite side is gaining evidence.`;
-  if (plan.status === 'NO PLAN' && plan.commitmentStatus === 'SCOUTING') planText = 'No active plan. Edge15 is waiting for a directional idea to form before the minute-9 commitment check.';
+  if (plan.status === 'NO PLAN' && plan.commitmentStatus === 'SCOUTING') planText = 'No active plan. Edge15 is waiting for a directional idea to form before the 8:00-left commitment test.';
 
   const effectiveDirection = plan.commitmentStatus === 'COMMITTED' ? plan.committedDirection : direction;
   const invalidation = effectiveDirection === 'OVER'
@@ -341,8 +341,8 @@ function withNarrative(plan: SignalPlan, decision: Decision, countdown: SignalPl
 }
 
 function buildNextStep(plan: SignalPlan, decision: Decision, display: string) {
-  if (plan.commitmentStatus === 'SCOUTING') return `Scout Mode. At about 6:00 remaining, Edge15 will commit to OVER, commit to UNDER, or mark this contract NO TRADE.`;
-  if (plan.commitmentStatus === 'NO TRADE') return `No Trade was committed at minute 9. Edge15 will continue showing risk context, but it will not chase a late prediction for this contract.`;
+  if (plan.commitmentStatus === 'SCOUTING') return `Scout Mode. At about 8:00 remaining, Edge15 will commit to OVER, commit to UNDER, or mark this contract NO TRADE.`;
+  if (plan.commitmentStatus === 'NO TRADE') return `No Trade was committed at the 8:00-left test. Edge15 will continue showing risk context, but it will not chase a late prediction for this contract.`;
   if (plan.commitmentStatus === 'COMMITTED') return `Committed ${plan.committedDirection}. If you enter, press Entered ${plan.committedDirection}; otherwise use HOLD/CAUTION/DANGER as management context, not a new side flip.`;
   if (plan.status === 'ENTER') return `Entry plan is confirmed with ${display} remaining. If you enter, press Entered ${plan.direction} so Edge15 switches into HOLD / CAUTION / DANGER mode.`;
   if (plan.status === 'READY') return `Wait for the signal to hold one more update, remain on the correct side of the strike, and keep opportunity above 88%.`;

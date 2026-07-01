@@ -1,31 +1,27 @@
-# Edge15 Genesis-022
+# Edge15 Genesis-023
 
-Edge15 Genesis-022 adds the Entry Value Engine and Early Entry Lab while preserving the current working live trading logic.
+Edge15 Genesis-023 is the **8-Minute Commit Test** build.
 
-## What is new
+This version moves the live commitment checkpoint from the prior 6:00-left area to about **8:00 remaining** while preserving the newer safety guardrails.
 
-- Entry Value: BAD / FAIR / GOOD / GREAT
-- Estimated win probability vs current Kalshi ask when available
-- Estimated edge: Edge15 probability minus market price
-- Risk/reward display: cost, upside, and risk
-- Early Entry Lab for clean early-entry observation
-- Commit Timing Lab now shows average ask and timing value edge
-- Best Accuracy / Best Value / Best Balance timing labels
-- Current Lock text overflow cleanup
+## What changed
 
-## What stayed unchanged
+- Live commitment test point is now **8:00 left**.
+- Edge15 still does **not** force a trade at 8:00.
+- It can still commit **NO TRADE** if the setup is weak.
+- Trade Quality, Entry Value, final-3-minute protection, payout/value gates, auto-tightening, and late-flip protection remain active.
+- Commit Timing Lab, Strategy Profile Lab, Performance Tracker, Version Lab, and backup/export data remain compatible.
 
-- Core Genesis-017/020/021 live recommendation logic
-- Commit Timing Lab storage compatibility
-- Performance Tracker storage compatibility
-- Version Lab and Strategy Profile Lab compatibility
+## Why this exists
 
-## Install
+The Commit Timing Lab showed that 8:00 remaining may be a valuable earlier decision point. This build tests whether Edge15 can enter earlier while odds may still be better, without becoming reckless.
+
+## Deploy
 
 Upload the contents of this folder into the GitHub repo root and commit.
 
 Recommended commit message:
 
 ```text
-Genesis-022: add entry value engine
+Genesis-023: test 8-minute commitment timing
 ```

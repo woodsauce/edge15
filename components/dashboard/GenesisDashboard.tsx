@@ -255,7 +255,7 @@ const STRATEGY_PROFILES: StrategyProfile[] = [
   { id: 'no_chase', label: 'No-Chase', description: 'Blocks late/high-flip setups and avoids forced final-window entries.' },
 ];
 
-const STRATEGY_CAPTURE_ELAPSED_MS = 9 * 60 * 1000;
+const STRATEGY_CAPTURE_ELAPSED_MS = 7 * 60 * 1000;
 const STRATEGY_CAPTURE_WINDOW_MS = 60 * 1000;
 
 
@@ -526,7 +526,7 @@ export function GenesisDashboard() {
   function buildPerformanceBackup() {
     return {
       app: 'Edge15',
-      release: 'Genesis-022',
+      release: 'Genesis-023',
       exportedAt: new Date().toISOString(),
       storageKeys: {
         commitmentAccuracy: COMMITMENT_ACCURACY_STORAGE_KEY,
@@ -555,7 +555,7 @@ export function GenesisDashboard() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `edge15-genesis-022-performance-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `edge15-genesis-023-performance-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -811,7 +811,7 @@ export function GenesisDashboard() {
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-022</div>
+          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-023</div>
           <h1 className="text-3xl font-black tracking-tight">Edge15</h1>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -993,12 +993,12 @@ export function GenesisDashboard() {
       ) : null}
 
       {visibleSections.genesisStatus ? (
-        <Panel title="Genesis-022 status">
+        <Panel title="Genesis-023 status">
           <ul className="list-disc space-y-2 pl-5 text-sm text-edge-muted">
             <li>Commitment Accuracy Tracker grades Edge15's locked contract predictions for the last 10 completed windows.</li>
             <li>Market microstructure now uses Coinbase level-2 order book spread, depth, and imbalance as another professional-style data read.</li>
-            <li>Genesis-012.1 minute-9 commitment behavior remains intact.</li>
-            <li>Genesis-022 preserves the Genesis-017 trade logic and adds performance backup, restore, and version-comparison support.</li>
+            <li>Genesis-023 changes the live commitment checkpoint to 8:00 remaining for testing.</li>
+            <li>Genesis-023 preserves the Genesis-017/022 guardrails and tests an 8:00-left live commitment point.</li>
           </ul>
         </Panel>
       ) : null}
@@ -1194,7 +1194,7 @@ function StrategyProfileLabPanel({ records }: { records: StrategyProfileRecord[]
       <div className="grid gap-3 sm:grid-cols-3">
         <Metric label="Best Profile" value={best ? best.label : 'Collecting'} detail={best ? `${best.winRate}% • ${best.wins}-${best.losses}` : 'Need 5+ scored'} help="Shadow-tests trading styles once per window. It does not change the live recommendation." tone={best && (best.winRate ?? 0) >= 75 ? 'good' : 'blue'} />
         <Metric label="Profiles" value={`${STRATEGY_PROFILES.length}`} detail="Shadow tested" help="Aggressive, balanced, selective, ultra-selective, value-only, and no-chase profiles are graded separately." tone="neutral" />
-        <Metric label="Live Logic" value="Unchanged" detail="Observation only" help="Genesis-022 adds testing and comparison. It does not alter the working Genesis-017/020 entry engine." tone="blue" />
+        <Metric label="Live Logic" value="8m Test" detail="Experimental commit timing" help="Genesis-023 tests an 8:00-left commitment while keeping the Genesis-017/020 guardrails active." tone="blue" />
       </div>
       <div className="mt-4 overflow-hidden rounded-2xl border border-edge-line">
         <div className="grid grid-cols-[96px_72px_64px_74px_1fr] gap-2 bg-black/30 px-3 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-edge-muted">
@@ -1211,7 +1211,7 @@ function StrategyProfileLabPanel({ records }: { records: StrategyProfileRecord[]
         ))}
       </div>
       <div className="mt-3 rounded-2xl border border-edge-line bg-black/20 p-3 text-xs leading-5 text-edge-muted">
-        Captures happen around the same minute-9 decision point. Later, we can combine this with the Commit Timing Lab to pick the best timing and the best profile together.
+        Captures happen around the same 8:00-left test decision point. Later, we can combine this with the Commit Timing Lab to pick the best timing and the best profile together.
       </div>
     </Panel>
   );
@@ -1255,7 +1255,7 @@ function PerformanceBackupPanel({
   return (
     <Panel title="Backup + compare">
       <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-        <Metric label="Current version" value="Genesis-022" detail="Logic preserved" help="Genesis-022 does not change the core Genesis-017 trading engine. It protects your results and makes side-by-side testing easier." tone="blue" />
+        <Metric label="Current version" value="Genesis-023" detail="8m test" help="Genesis-023 preserves the core Genesis-017 guardrails but tests an 8:00-left live commit. It protects your results and makes side-by-side testing easier." tone="blue" />
         <Metric label="All-time read" value={bestLabel} detail={allTime.winRate === null ? 'No scored records' : `${allTime.winRate}% • ${allTime.wins}-${allTime.losses}`} help="Quick version-comparison label from this browser's stored performance records." tone={bestTone} />
         <Metric label="Last hour" value={recent.winRate === null ? '—' : `${recent.winRate}%`} detail={`W/L ${recent.wins}-${recent.losses}`} help="Useful when comparing multiple Genesis versions side by side over the same test window." tone={recent.winRate === null ? 'neutral' : recent.winRate >= 75 ? 'good' : recent.winRate >= 60 ? 'warn' : 'bad'} />
       </div>
@@ -1280,7 +1280,7 @@ function TradeQualityPanel({ quality, autoTightening, flipRisk }: { quality: Tra
         <Metric label="Late Flip Risk" value={flipRisk.level} detail={`${flipRisk.flips} recent flips`} help={flipRisk.message} tone={flipRisk.tone} />
       </div>
       <div className="mt-3 rounded-2xl border border-edge-line bg-black/20 p-3 text-xs leading-5 text-edge-muted">
-        Genesis-022 uses this score as the cockpit read: prediction strength is not enough unless value, stability, flip risk, and recent model performance are acceptable.
+        Genesis-023 uses this score as the cockpit read: prediction strength is not enough unless value, stability, flip risk, and recent model performance are acceptable.
       </div>
     </Panel>
   );
@@ -1302,7 +1302,7 @@ function TradeReplayPanel({ records }: { records: CommitmentAccuracyRecord[] }) 
           </div>
         ))}
       </div>
-      <div className="mt-3 text-xs leading-5 text-edge-muted">Replay records help identify bad setups without manual buttons. Older records may not have every Genesis-022 snapshot field until new commitments are created.</div>
+      <div className="mt-3 text-xs leading-5 text-edge-muted">Replay records help identify bad setups without manual buttons. Older records may not have every Genesis-023 snapshot field until new commitments are created.</div>
     </Panel>
   );
 }
@@ -1539,8 +1539,8 @@ function EarlyEntryLabPanel({ entryValue, timingRecords, profileRecords, countdo
   return (
     <Panel title="Early Entry Lab">
       <div className="grid gap-3 sm:grid-cols-4">
-        <Metric label="Current Phase" value={currentPhase} detail={countdown.display} help="This is a lab read only. Live trading logic is unchanged while timing/value evidence builds." tone="blue" />
-        <Metric label="Clean Early" value={cleanEarlyArmed ? 'ARMED' : 'WAIT'} detail={entryValue.label} help="ARMED means Edge15 sees enough value to start paying attention before the normal commitment point. It is not a live entry command yet." tone={cleanEarlyArmed ? 'good' : 'warn'} />
+        <Metric label="Current Phase" value={currentPhase} detail={countdown.display} help="Genesis-023 live mode is testing the 8:00-left commitment point while value evidence builds." tone="blue" />
+        <Metric label="Clean Early" value={cleanEarlyArmed ? 'ARMED' : 'WAIT'} detail={entryValue.label} help="ARMED means Edge15 sees enough value to consider the 8:00-left test point cleaner than waiting." tone={cleanEarlyArmed ? 'good' : 'warn'} />
         <Metric label="Best Early Slot" value={bestEarly ? bestEarly.label : 'Collecting'} detail={bestEarly ? `${bestEarly.winRate ?? '—'}% • edge ${bestEarly.valueEdge === null ? '—' : bestEarly.valueEdge}` : 'Need 5+ scored'} help="Compares 10:00, 8:00, and 6:00 checkpoints for early value opportunities." tone={bestEarly && bestEarly.valueScore >= 65 ? 'good' : 'blue'} />
         <Metric label="4m vs 3m" value={fourMinute && threeMinute ? `${fourMinute.winRate ?? '—'} / ${threeMinute.winRate ?? '—'}%` : 'Collecting'} detail="accuracy check" help="4:00 may be the best usable balance; 3:00 may be accurate but too late/expensive without strong value." tone="warn" />
       </div>
@@ -1562,7 +1562,7 @@ function EarlyEntryLabPanel({ entryValue, timingRecords, profileRecords, countdo
         ))}
       </div>
       <div className="mt-3 rounded-2xl border border-edge-blue/30 bg-edge-blue/10 p-3 text-xs leading-5 text-edge-blue">
-        Genesis-022 observes early-entry value only. It does not change the live recommendation until enough timing, profile, and payout samples prove the rule.
+        Genesis-023 actively tests the 8:00-left commitment point while continuing to observe early-entry value. It still uses NO TRADE when value, quality, or stability are not clean enough.
       </div>
     </Panel>
   );
@@ -1636,7 +1636,7 @@ function buildEntryValue(decision: Decision, activeSignal: SignalPlan | null, co
     ? `${askRead} Edge15 should avoid paying for this unless value improves.${lateRead}`
     : label === 'FAIR'
       ? `${askRead} This is watchable, but not clean enough to treat as a premium entry.${lateRead}`
-      : `${askRead} This is the type of price-versus-probability setup Genesis-022 is designed to track.${lateRead}`;
+      : `${askRead} This is the type of price-versus-probability setup Genesis-023 is designed to track.${lateRead}`;
 
   return {
     label,
@@ -1685,7 +1685,7 @@ function CommitTimingLabPanel({ records, countdown }: { records: CommitTimingRec
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="text-sm leading-6 text-slate-200">Shadow-tests decision checkpoints without changing live trading logic.</div>
-              <div className="mt-1 text-xs leading-5 text-edge-muted">Genesis-022 now shows timing value, not just accuracy. A perfect late read can still be a bad entry if the ask is too expensive.</div>
+              <div className="mt-1 text-xs leading-5 text-edge-muted">Genesis-023 now shows timing value, not just accuracy. A perfect late read can still be a bad entry if the ask is too expensive.</div>
             </div>
             <div className="rounded-full border border-edge-blue/40 bg-edge-blue/10 px-3 py-1 text-xs font-black text-edge-blue">
               Live logic unchanged
@@ -1733,7 +1733,7 @@ function CommitTimingLabPanel({ records, countdown }: { records: CommitTimingRec
             </div>
           </div>
           <div className="rounded-2xl border border-edge-amber/30 bg-edge-amber/10 p-3 text-xs leading-5 text-edge-amber">
-            Early checkpoints can pay better but need cleaner signal. Late checkpoints may predict better but often have weak payout. Genesis-022 starts measuring both sides of that tradeoff.
+            Early checkpoints can pay better but need cleaner signal. Late checkpoints may predict better but often have weak payout. Genesis-023 starts measuring both sides of that tradeoff.
           </div>
         </div>
       </div>
@@ -2018,7 +2018,7 @@ function CommitmentAccuracyPanel({ records, activeSignal }: { records: Commitmen
   return (
     <Panel title="Commitment accuracy">
       <div className="grid gap-3 sm:grid-cols-3">
-        <Metric label="Last 10" value={last.length ? `${correct}/${resolved.length}` : '—'} detail="Resolved commitments" help="This grades Edge15's locked minute-9 prediction, not later live recommendations." tone={accuracy === null ? 'neutral' : accuracy >= 60 ? 'good' : accuracy >= 50 ? 'warn' : 'bad'} />
+        <Metric label="Last 10" value={last.length ? `${correct}/${resolved.length}` : '—'} detail="Resolved commitments" help="This grades Edge15's locked 8:00-left test prediction, not later live recommendations." tone={accuracy === null ? 'neutral' : accuracy >= 60 ? 'good' : accuracy >= 50 ? 'warn' : 'bad'} />
         <Metric label="Accuracy" value={accuracy === null ? '—' : `${accuracy}%`} detail="Won / resolved" help="No Trade and unresolved windows are not counted as wins or losses." tone={accuracy === null ? 'neutral' : accuracy >= 60 ? 'good' : accuracy >= 50 ? 'warn' : 'bad'} />
         <Metric label="Current lock" value={activeSignal?.commitmentStatus === 'COMMITTED' ? activeSignal.committedDirection : activeSignal?.commitmentStatus === 'NO TRADE' ? 'NO TRADE' : 'SCOUT'} detail="This contract" help="Edge15 records this automatically when the contract rolls into the next 15-minute window. SCOUT means no lock has formed yet." tone={activeSignal?.commitmentStatus === 'COMMITTED' ? 'blue' : 'neutral'} />
       </div>
@@ -2372,7 +2372,7 @@ function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, co
     {
       label: 'Settlement risk',
       passed: decision.settlement.risk === 'Low',
-      detail: `${decision.settlement.risk}. Clean ENTER needs Low settlement risk in Genesis-022. ${decision.settlement.message}`,
+      detail: `${decision.settlement.risk}. Clean ENTER needs Low settlement risk in Genesis-023. ${decision.settlement.message}`,
       severity: decision.settlement.risk === 'Extreme' || decision.settlement.risk === 'High' ? 'block' : 'warn',
     },
     buildValueGate(direction, countdown, snapshot),
@@ -2404,7 +2404,7 @@ function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, co
 
 function buildLateEntryWarning(decision: Decision, countdown: Countdown) {
   if (countdown.remainingMs > 360000) return null;
-  if (countdown.remainingMs <= 180000) return `Only ${countdown.display} remains. Genesis-022 blocks fresh late entries because the last 3 minutes are too jumpy and the payout is often too small.`;
+  if (countdown.remainingMs <= 180000) return `Only ${countdown.display} remains. Genesis-023 blocks fresh late entries because the last 3 minutes are too jumpy and the payout is often too small.`;
   if (decision.settlement.risk === 'Low' && decision.entryScore >= 82) return null;
   const required = decision.settlement.requiredMove === null ? 'unknown' : `$${decision.settlement.requiredMove.toFixed(0)}`;
   const realistic = decision.settlement.realisticMove === null ? 'unknown' : `$${decision.settlement.realisticMove.toFixed(0)}`;
