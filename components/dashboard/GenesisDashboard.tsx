@@ -134,6 +134,8 @@ export function GenesisDashboard() {
   const [qualityFilter, setQualityFilter] = useState<QualityFilter>('ANY');
   const [signalHistory, setSignalHistory] = useState<SignalHistoryPoint[]>([]);
   const [commitmentAccuracy, setCommitmentAccuracy] = useState<CommitmentAccuracyRecord[]>([]);
+  const [backupStatus, setBackupStatus] = useState<string>('Ready');
+  const restoreInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const savedAccuracy = window.localStorage.getItem(COMMITMENT_ACCURACY_STORAGE_KEY);
@@ -339,6 +341,79 @@ export function GenesisDashboard() {
   }
 
 
+
+  function buildPerformanceBackup() {
+    return {
+      app: 'Edge15',
+      release: 'Genesis-018',
+      exportedAt: new Date().toISOString(),
+      storageKeys: {
+        commitmentAccuracy: COMMITMENT_ACCURACY_STORAGE_KEY,
+        signalPlan: SIGNAL_PLAN_STORAGE_KEY,
+        tradeJournal: TRADE_JOURNAL_STORAGE_KEY,
+        engineAverages: ENGINE_AVERAGE_STORAGE_KEY,
+        qualityFilter: QUALITY_FILTER_STORAGE_KEY,
+      },
+      commitmentAccuracy,
+      signalPlan,
+      journal,
+      engineAverages,
+      qualityFilter,
+    };
+  }
+
+  function exportPerformanceData() {
+    const backup = buildPerformanceBackup();
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `edge15-genesis-018-performance-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setBackupStatus(`Exported ${commitmentAccuracy.length} performance records`);
+  }
+
+  function backupToClipboard() {
+    navigator.clipboard.writeText(JSON.stringify(buildPerformanceBackup(), null, 2))
+      .then(() => setBackupStatus('Backup copied to clipboard'))
+      .catch(() => setBackupStatus('Clipboard blocked. Use Export Results instead.'));
+  }
+
+  function triggerRestore() {
+    restoreInputRef.current?.click();
+  }
+
+  async function restorePerformanceData(file: File | null) {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as Partial<ReturnType<typeof buildPerformanceBackup>>;
+      const restoredRecords = Array.isArray(parsed.commitmentAccuracy) ? parsed.commitmentAccuracy.slice(0, 500) as CommitmentAccuracyRecord[] : [];
+      setCommitmentAccuracy(restoredRecords);
+      window.localStorage.setItem(COMMITMENT_ACCURACY_STORAGE_KEY, JSON.stringify(restoredRecords));
+      if (parsed.signalPlan) {
+        setSignalPlan(parsed.signalPlan as SignalPlan);
+        window.localStorage.setItem(SIGNAL_PLAN_STORAGE_KEY, JSON.stringify(parsed.signalPlan));
+      }
+      if (Array.isArray(parsed.journal)) {
+        setJournal(parsed.journal as TradeJournalEntry[]);
+        window.localStorage.setItem(TRADE_JOURNAL_STORAGE_KEY, JSON.stringify(parsed.journal));
+      }
+      if (parsed.engineAverages && typeof parsed.engineAverages === 'object') {
+        setEngineAverages(parsed.engineAverages as EngineAverages);
+        window.localStorage.setItem(ENGINE_AVERAGE_STORAGE_KEY, JSON.stringify(parsed.engineAverages));
+      }
+      setBackupStatus(`Restored ${restoredRecords.length} performance records from backup`);
+    } catch {
+      setBackupStatus('Restore failed. The selected file was not a valid Edge15 backup.');
+    } finally {
+      if (restoreInputRef.current) restoreInputRef.current.value = '';
+    }
+  }
+
   useEffect(() => {
     if (!snapshot.fetchedAt) return;
     const action = signalPlan?.displayAction ?? decision.action;
@@ -412,14 +487,14 @@ export function GenesisDashboard() {
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-017</div>
+          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-018</div>
           <h1 className="text-3xl font-black tracking-tight">Edge15</h1>
         </div>
         <div className="flex flex-col items-end gap-2">
           <div className={`rounded-full border px-3 py-2 text-xs ${priceFeedLive ? 'border-edge-green/40 bg-edge-green/10 text-edge-green' : 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber'}`}>
             {priceFeedLive ? 'Price feed live' : 'Price feed degraded'}
           </div>
-          <div className="hidden rounded-full border border-edge-line bg-black/20 px-3 py-1 text-[11px] text-edge-muted sm:block">Trade quality • auto-tightening</div>
+          <div className="hidden rounded-full border border-edge-line bg-black/20 px-3 py-1 text-[11px] text-edge-muted sm:block">Performance backup • version comparison</div>
         </div>
       </header>
 
@@ -459,11 +534,13 @@ export function GenesisDashboard() {
         </Panel>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-3">
+      <section className="grid gap-4 xl:grid-cols-4">
         <TradeQualityPanel quality={tradeQuality} autoTightening={autoTightening} flipRisk={flipRisk} />
         <PerformanceTrackerPanel records={commitmentAccuracy} />
         <CommitmentAccuracyPanel records={commitmentAccuracy} activeSignal={activeSignal} />
+        <PerformanceBackupPanel records={commitmentAccuracy} status={backupStatus} onExport={exportPerformanceData} onCopy={backupToClipboard} onRestore={triggerRestore} />
       </section>
+      <input ref={restoreInputRef} type="file" accept="application/json" className="hidden" onChange={(event) => restorePerformanceData(event.target.files?.[0] ?? null)} />
 
       <TradeReplayPanel records={commitmentAccuracy} />
 
@@ -580,12 +657,12 @@ export function GenesisDashboard() {
       ) : null}
 
       {visibleSections.genesisStatus ? (
-        <Panel title="Genesis-017 status">
+        <Panel title="Genesis-018 status">
           <ul className="list-disc space-y-2 pl-5 text-sm text-edge-muted">
             <li>Commitment Accuracy Tracker grades Edge15's locked contract predictions for the last 10 completed windows.</li>
             <li>Market microstructure now uses Coinbase level-2 order book spread, depth, and imbalance as another professional-style data read.</li>
             <li>Genesis-012.1 minute-9 commitment behavior remains intact.</li>
-            <li>Genesis-017 adds Trade Quality, Auto-Tightening, Late Flip Risk, and Trade Replay snapshots.</li>
+            <li>Genesis-018 preserves the Genesis-017 trade logic and adds performance backup, restore, and version-comparison support.</li>
           </ul>
         </Panel>
       ) : null}
@@ -698,6 +775,44 @@ function RecentTrades({ entries, activeId, onSelect }: { entries: TradeJournalEn
 
 
 
+
+function PerformanceBackupPanel({
+  records,
+  status,
+  onExport,
+  onCopy,
+  onRestore,
+}: {
+  records: CommitmentAccuracyRecord[];
+  status: string;
+  onExport: () => void;
+  onCopy: () => void;
+  onRestore: () => void;
+}) {
+  const windows = buildPerformanceWindows(records);
+  const allTime = windows[0];
+  const recent = windows.find((window) => window.label === '1 hour') ?? allTime;
+  const bestLabel = allTime.winRate === null ? 'Waiting' : allTime.winRate >= 75 ? 'Strong' : allTime.winRate >= 60 ? 'Mixed' : 'Tighten';
+  const bestTone: Tone = allTime.winRate === null ? 'neutral' : allTime.winRate >= 75 ? 'good' : allTime.winRate >= 60 ? 'warn' : 'bad';
+  return (
+    <Panel title="Backup + compare">
+      <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+        <Metric label="Current version" value="Genesis-018" detail="Logic preserved" help="Genesis-018 does not change the core Genesis-017 trading engine. It protects your results and makes side-by-side testing easier." tone="blue" />
+        <Metric label="All-time read" value={bestLabel} detail={allTime.winRate === null ? 'No scored records' : `${allTime.winRate}% • ${allTime.wins}-${allTime.losses}`} help="Quick version-comparison label from this browser's stored performance records." tone={bestTone} />
+        <Metric label="Last hour" value={recent.winRate === null ? '—' : `${recent.winRate}%`} detail={`W/L ${recent.wins}-${recent.losses}`} help="Useful when comparing multiple Genesis versions side by side over the same test window." tone={recent.winRate === null ? 'neutral' : recent.winRate >= 75 ? 'good' : recent.winRate >= 60 ? 'warn' : 'bad'} />
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+        <button onClick={onExport} className="rounded-xl border border-edge-blue/40 bg-edge-blue/10 px-3 py-3 text-xs font-black text-edge-blue hover:border-edge-blue">Export Results</button>
+        <button onClick={onCopy} className="rounded-xl border border-edge-line bg-black/20 px-3 py-3 text-xs font-black text-white hover:border-edge-blue/50">Copy Backup</button>
+        <button onClick={onRestore} className="rounded-xl border border-edge-amber/40 bg-edge-amber/10 px-3 py-3 text-xs font-black text-edge-amber hover:border-edge-amber">Restore</button>
+      </div>
+      <div className="mt-3 rounded-2xl border border-edge-line bg-black/20 p-3 text-xs leading-5 text-edge-muted">
+        {status}. Stored records: {records.length}. Use Export before clearing cache, switching browsers, or comparing PC vs phone.
+      </div>
+    </Panel>
+  );
+}
+
 function TradeQualityPanel({ quality, autoTightening, flipRisk }: { quality: TradeQuality; autoTightening: AutoTighteningProfile; flipRisk: FlipRisk }) {
   return (
     <Panel title="Trade quality">
@@ -707,7 +822,7 @@ function TradeQualityPanel({ quality, autoTightening, flipRisk }: { quality: Tra
         <Metric label="Late Flip Risk" value={flipRisk.level} detail={`${flipRisk.flips} recent flips`} help={flipRisk.message} tone={flipRisk.tone} />
       </div>
       <div className="mt-3 rounded-2xl border border-edge-line bg-black/20 p-3 text-xs leading-5 text-edge-muted">
-        Genesis-017 uses this score as the cockpit read: prediction strength is not enough unless value, stability, flip risk, and recent model performance are acceptable.
+        Genesis-018 uses this score as the cockpit read: prediction strength is not enough unless value, stability, flip risk, and recent model performance are acceptable.
       </div>
     </Panel>
   );
@@ -729,7 +844,7 @@ function TradeReplayPanel({ records }: { records: CommitmentAccuracyRecord[] }) 
           </div>
         ))}
       </div>
-      <div className="mt-3 text-xs leading-5 text-edge-muted">Replay records help identify bad setups without manual buttons. Older records may not have every Genesis-017 snapshot field until new commitments are created.</div>
+      <div className="mt-3 text-xs leading-5 text-edge-muted">Replay records help identify bad setups without manual buttons. Older records may not have every Genesis-018 snapshot field until new commitments are created.</div>
     </Panel>
   );
 }
@@ -1257,7 +1372,7 @@ function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, co
     {
       label: 'Settlement risk',
       passed: decision.settlement.risk === 'Low',
-      detail: `${decision.settlement.risk}. Clean ENTER needs Low settlement risk in Genesis-017. ${decision.settlement.message}`,
+      detail: `${decision.settlement.risk}. Clean ENTER needs Low settlement risk in Genesis-018. ${decision.settlement.message}`,
       severity: decision.settlement.risk === 'Extreme' || decision.settlement.risk === 'High' ? 'block' : 'warn',
     },
     buildValueGate(direction, countdown, snapshot),
@@ -1289,7 +1404,7 @@ function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, co
 
 function buildLateEntryWarning(decision: Decision, countdown: Countdown) {
   if (countdown.remainingMs > 360000) return null;
-  if (countdown.remainingMs <= 180000) return `Only ${countdown.display} remains. Genesis-017 blocks fresh late entries because the last 3 minutes are too jumpy and the payout is often too small.`;
+  if (countdown.remainingMs <= 180000) return `Only ${countdown.display} remains. Genesis-018 blocks fresh late entries because the last 3 minutes are too jumpy and the payout is often too small.`;
   if (decision.settlement.risk === 'Low' && decision.entryScore >= 82) return null;
   const required = decision.settlement.requiredMove === null ? 'unknown' : `$${decision.settlement.requiredMove.toFixed(0)}`;
   const realistic = decision.settlement.realisticMove === null ? 'unknown' : `$${decision.settlement.realisticMove.toFixed(0)}`;
