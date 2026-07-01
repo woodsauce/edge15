@@ -1,6 +1,6 @@
-# Genesis-016 — Focused Cockpit Cleanup
+# Genesis-017 — Focused Cockpit Cleanup
 
-Genesis-016 removes clutter from the main Edge15 screen so the app is easier to use during live 15-minute markets.
+Genesis-017 removes clutter from the main Edge15 screen so the app is easier to use during live 15-minute markets.
 
 ## Main-screen focus
 
@@ -27,7 +27,7 @@ Hidden from the main screen:
 
 ## Accuracy posture
 
-Genesis-016 keeps the Genesis-015 protection behavior:
+Genesis-017 keeps the Genesis-015 protection behavior:
 
 - Final 3 minutes blocked for fresh entries
 - Payout-value gate

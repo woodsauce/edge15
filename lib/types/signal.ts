@@ -26,6 +26,12 @@ export type SignalPlan = {
   committedDirection: SignalDirection;
   committedAt: string | null;
   commitmentReason: string;
+  committedEntryScore?: number | null;
+  committedConfidence?: number | null;
+  committedTradeGrade?: string | null;
+  committedSettlementRisk?: Decision['settlement']['risk'] | null;
+  committedPrice?: number | null;
+  committedDistance?: number | null;
 };
 
 export type SignalPlanInput = {

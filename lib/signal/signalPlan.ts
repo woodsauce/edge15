@@ -154,6 +154,12 @@ function createPlan(contractKey: string, direction: Decision['direction'], rawSt
     committedDirection: 'NONE',
     committedAt: null,
     commitmentReason: 'Scout Mode: Edge15 has not reached the minute-9 commitment point yet.',
+    committedEntryScore: null,
+    committedConfidence: null,
+    committedTradeGrade: null,
+    committedSettlementRisk: null,
+    committedPrice: null,
+    committedDistance: null,
   }, decision, countdown);
 }
 
@@ -187,6 +193,12 @@ function maybeCommit(plan: SignalPlan, decision: Decision, countdown: SignalPlan
       committedDirection: 'NONE',
       committedAt: nowIso,
       commitmentReason: `Minute-9 commitment check did not find a clean, protected edge. Edge15 is intentionally sitting this contract out instead of forcing a side.`,
+      committedEntryScore: decision.entryScore,
+      committedConfidence: decision.confidence,
+      committedTradeGrade: decision.tradeGrade,
+      committedSettlementRisk: decision.settlement.risk,
+      committedPrice: decision.distanceToReference === null ? null : null,
+      committedDistance: decision.distanceToReference,
     }, decision, countdown);
   }
 
@@ -202,6 +214,12 @@ function maybeCommit(plan: SignalPlan, decision: Decision, countdown: SignalPlan
     committedDirection,
     committedAt: nowIso,
     commitmentReason: `At the minute-9 commitment check, Edge15 locked ${committedDirection}. The prediction side will not flip for the rest of this 15-minute contract; only the management status can change.`,
+    committedEntryScore: decision.entryScore,
+    committedConfidence: decision.confidence,
+    committedTradeGrade: decision.tradeGrade,
+    committedSettlementRisk: decision.settlement.risk,
+    committedPrice: decision.distanceToReference === null ? null : null,
+    committedDistance: decision.distanceToReference,
   }, decision, countdown);
 }
 

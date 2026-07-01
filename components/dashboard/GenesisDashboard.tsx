@@ -43,7 +43,7 @@ const SECTION_STORAGE_KEY = 'edge15.visibleSections.v2.focus';
 const ENGINE_AVERAGE_STORAGE_KEY = 'edge15.engineAverages.v1';
 const ACTIVE_JOURNAL_ID_STORAGE_KEY = 'edge15.activeJournalEntryId.v1';
 const QUALITY_FILTER_STORAGE_KEY = 'edge15.tradeQualityFilter.v1';
-const COMMITMENT_ACCURACY_STORAGE_KEY = 'edge15.commitmentAccuracy.v2.performance';
+const COMMITMENT_ACCURACY_STORAGE_KEY = 'edge15.commitmentAccuracy.v3.replay';
 const DEFAULT_VISIBLE_SECTIONS = {
   aiDesk: false,
   indicators: false,
@@ -76,7 +76,37 @@ type CommitmentAccuracyRecord = {
   close: number | null;
   entryScore: number | null;
   confidence: number | null;
+  tradeGrade?: string | null;
+  settlementRisk?: Decision['settlement']['risk'] | null;
+  priceAtCommit?: number | null;
+  distanceAtCommit?: number | null;
+  flipRiskAtCommit?: string | null;
+  tradeQualityAtCommit?: string | null;
   source: 'auto_observed' | 'auto_recovered';
+};
+
+type AutoTighteningProfile = {
+  mode: 'NORMAL' | 'STRICT' | 'MAX';
+  recentWinRate: number | null;
+  recentResolved: number;
+  extraScoreNeeded: number;
+  message: string;
+  tone: Tone;
+};
+
+type FlipRisk = {
+  level: 'Low' | 'Medium' | 'High';
+  flips: number;
+  recentFlip: boolean;
+  message: string;
+  tone: Tone;
+};
+
+type TradeQuality = {
+  label: 'AVOID' | 'WEAK' | 'DECENT' | 'STRONG';
+  score: number;
+  message: string;
+  tone: Tone;
 };
 
 type PerformanceWindow = {
@@ -236,7 +266,10 @@ export function GenesisDashboard() {
   }
 
   const countdown = useMemo(() => buildCountdown(now), [now]);
-  const decision = useMemo(() => calculateDecision(snapshot, countdown), [snapshot, countdown]);
+  const rawDecision = useMemo(() => calculateDecision(snapshot, countdown), [snapshot, countdown]);
+  const autoTightening = useMemo(() => buildAutoTighteningProfile(commitmentAccuracy), [commitmentAccuracy]);
+  const flipRisk = useMemo(() => buildLateFlipRisk(signalHistory, countdown), [signalHistory, countdown]);
+  const decision = useMemo(() => applyGenesis17Protection(rawDecision, autoTightening, flipRisk, countdown), [rawDecision, autoTightening, flipRisk, countdown]);
   const positionAssessment = useMemo(() => position ? assessPosition(position, snapshot, decision, countdown) : null, [position, snapshot, decision, countdown]);
   const tradingDesk = useMemo(() => buildTradingDesk(snapshot, decision, signalPlan, countdown), [snapshot, decision, signalPlan, countdown]);
   const journalSummary = useMemo(() => summarizeJournal(journal), [journal]);
@@ -365,7 +398,8 @@ export function GenesisDashboard() {
   }
 
   const activeSignal = signalPlan;
-  const entryGates = useMemo(() => buildEntryGates(decision, activeSignal, countdown, qualityFilter, snapshot), [decision, activeSignal, countdown, qualityFilter, snapshot]);
+  const tradeQuality = useMemo(() => buildTradeQuality(decision, activeSignal, countdown, snapshot, autoTightening, flipRisk), [decision, activeSignal, countdown, snapshot, autoTightening, flipRisk]);
+  const entryGates = useMemo(() => buildEntryGates(decision, activeSignal, countdown, qualityFilter, snapshot, autoTightening, flipRisk, tradeQuality), [decision, activeSignal, countdown, qualityFilter, snapshot, autoTightening, flipRisk, tradeQuality]);
   const lateWarning = useMemo(() => buildLateEntryWarning(decision, countdown), [decision, countdown]);
   const contradiction = useMemo(() => buildContradictionAlert(decision, activeSignal, countdown), [decision, activeSignal, countdown]);
   const doNotChase = useMemo(() => buildDoNotChaseWarning(decision, activeSignal, countdown), [decision, activeSignal, countdown]);
@@ -378,14 +412,14 @@ export function GenesisDashboard() {
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-016</div>
+          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-017</div>
           <h1 className="text-3xl font-black tracking-tight">Edge15</h1>
         </div>
         <div className="flex flex-col items-end gap-2">
           <div className={`rounded-full border px-3 py-2 text-xs ${priceFeedLive ? 'border-edge-green/40 bg-edge-green/10 text-edge-green' : 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber'}`}>
             {priceFeedLive ? 'Price feed live' : 'Price feed degraded'}
           </div>
-          <div className="hidden rounded-full border border-edge-line bg-black/20 px-3 py-1 text-[11px] text-edge-muted sm:block">Selective accuracy • final 3m blocked</div>
+          <div className="hidden rounded-full border border-edge-line bg-black/20 px-3 py-1 text-[11px] text-edge-muted sm:block">Trade quality • auto-tightening</div>
         </div>
       </header>
 
@@ -425,10 +459,13 @@ export function GenesisDashboard() {
         </Panel>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-2">
+      <section className="grid gap-4 xl:grid-cols-3">
+        <TradeQualityPanel quality={tradeQuality} autoTightening={autoTightening} flipRisk={flipRisk} />
         <PerformanceTrackerPanel records={commitmentAccuracy} />
         <CommitmentAccuracyPanel records={commitmentAccuracy} activeSignal={activeSignal} />
       </section>
+
+      <TradeReplayPanel records={commitmentAccuracy} />
 
       <section className="grid gap-4">
         <Panel title={position ? "Trade context + position" : "Focused decision dashboard"}>
@@ -436,7 +473,7 @@ export function GenesisDashboard() {
             <Metric label="Entry Score" value={`${decision.entryScore}/100`} detail={decision.entryQuality} help={entryScoreHelp(decision.entryScore)} tone={activeSignal?.tone ?? decision.tone} />
             <Metric label="Opportunity" value={`${decision.opportunity}%`} detail={decision.opportunityLabel} help={opportunityHelp(decision.opportunity)} tone={decision.opportunity > 75 ? 'good' : decision.opportunity > 55 ? 'warn' : 'bad'} />
             <Metric label="Trade Grade" value={decision.tradeGrade} detail={`${decision.confidence}% confidence`} help={tradeGradeHelp(decision.tradeGrade)} tone={activeSignal?.tone ?? decision.tone} />
-            <Metric label="Model Trust" value={`${tradingDesk.modelConfidence}%`} detail="Chief AI self-check" help={modelTrustHelp(tradingDesk.modelConfidence)} tone={tradingDesk.modelConfidence >= 75 ? 'good' : tradingDesk.modelConfidence >= 58 ? 'warn' : 'bad'} />
+            <Metric label="Trade Quality" value={tradeQuality.label} detail={`${tradeQuality.score}/100`} help={tradeQuality.message} tone={tradeQuality.tone} />
             <Metric label="Signal Stability" value={`${activeSignal?.stability ?? decision.stability}%`} detail={activeSignal ? `${activeSignal.status} • ${activeSignal.confirmations} confirmations` : 'Building plan'} help={signalStabilityHelp(activeSignal?.stability ?? decision.stability)} tone={(activeSignal?.stability ?? decision.stability) > 70 ? 'good' : (activeSignal?.stability ?? decision.stability) > 55 ? 'warn' : 'bad'} />
             <Metric label="Candles" value={`${snapshot.candles.length}`} detail="1m candles available" help="More candle history gives Edge15 a stronger indicator read." tone={snapshot.candles.length >= 10 ? 'good' : 'warn'} />
           </div>
@@ -543,12 +580,12 @@ export function GenesisDashboard() {
       ) : null}
 
       {visibleSections.genesisStatus ? (
-        <Panel title="Genesis-016 status">
+        <Panel title="Genesis-017 status">
           <ul className="list-disc space-y-2 pl-5 text-sm text-edge-muted">
             <li>Commitment Accuracy Tracker grades Edge15's locked contract predictions for the last 10 completed windows.</li>
             <li>Market microstructure now uses Coinbase level-2 order book spread, depth, and imbalance as another professional-style data read.</li>
             <li>Genesis-012.1 minute-9 commitment behavior remains intact.</li>
-            <li>Focused cockpit mode hides market microstructure, market story, confidence heat strip, AI debate, and manual trade-review panels by default.</li>
+            <li>Genesis-017 adds Trade Quality, Auto-Tightening, Late Flip Risk, and Trade Replay snapshots.</li>
           </ul>
         </Panel>
       ) : null}
@@ -659,6 +696,169 @@ function RecentTrades({ entries, activeId, onSelect }: { entries: TradeJournalEn
 
 
 
+
+
+function TradeQualityPanel({ quality, autoTightening, flipRisk }: { quality: TradeQuality; autoTightening: AutoTighteningProfile; flipRisk: FlipRisk }) {
+  return (
+    <Panel title="Trade quality">
+      <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+        <Metric label="Quality" value={quality.label} detail={`${quality.score}/100`} help={quality.message} tone={quality.tone} />
+        <Metric label="Auto-tightening" value={autoTightening.mode} detail={autoTightening.recentWinRate === null ? 'Waiting for history' : `${autoTightening.recentWinRate}% last ${autoTightening.recentResolved}`} help={autoTightening.message} tone={autoTightening.tone} />
+        <Metric label="Late Flip Risk" value={flipRisk.level} detail={`${flipRisk.flips} recent flips`} help={flipRisk.message} tone={flipRisk.tone} />
+      </div>
+      <div className="mt-3 rounded-2xl border border-edge-line bg-black/20 p-3 text-xs leading-5 text-edge-muted">
+        Genesis-017 uses this score as the cockpit read: prediction strength is not enough unless value, stability, flip risk, and recent model performance are acceptable.
+      </div>
+    </Panel>
+  );
+}
+
+function TradeReplayPanel({ records }: { records: CommitmentAccuracyRecord[] }) {
+  const recent = records.slice(0, 5);
+  if (!recent.length) return null;
+  return (
+    <Panel title="Trade replay snapshots">
+      <div className="grid gap-2 lg:grid-cols-5">
+        {recent.map((record) => (
+          <div key={record.contractKey} className="rounded-2xl border border-edge-line bg-black/20 p-3 text-xs leading-5">
+            <div className={`font-black ${record.correct === true ? 'text-edge-green' : record.correct === false ? 'text-edge-red' : 'text-edge-muted'}`}>{record.correct === true ? 'WIN' : record.correct === false ? 'LOSS' : record.committedDirection === 'NONE' ? 'NO TRADE' : 'PENDING'}</div>
+            <div className="mt-1 text-slate-200">{highlightText(`${record.committedDirection} → ${record.outcome}`)}</div>
+            <div className="mt-2 text-edge-muted">Score {record.entryScore ?? '—'} • Conf {record.confidence ?? '—'}%</div>
+            <div className="text-edge-muted">Grade {record.tradeGrade ?? '—'} • Risk {record.settlementRisk ?? '—'}</div>
+            <div className="text-edge-muted">Move {record.open !== null && record.close !== null ? `${record.open.toFixed(0)} → ${record.close.toFixed(0)}` : 'not resolved'}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 text-xs leading-5 text-edge-muted">Replay records help identify bad setups without manual buttons. Older records may not have every Genesis-017 snapshot field until new commitments are created.</div>
+    </Panel>
+  );
+}
+
+function buildAutoTighteningProfile(records: CommitmentAccuracyRecord[]): AutoTighteningProfile {
+  const scored = records.filter((record) => record.correct !== null).slice(0, 10);
+  const wins = scored.filter((record) => record.correct === true).length;
+  const losses = scored.filter((record) => record.correct === false).length;
+  const resolved = wins + losses;
+  const winRate = resolved ? Math.round((wins / resolved) * 100) : null;
+  if (resolved >= 8 && winRate !== null && winRate < 60) {
+    return {
+      mode: 'MAX',
+      recentWinRate: winRate,
+      recentResolved: resolved,
+      extraScoreNeeded: 10,
+      tone: 'bad',
+      message: `Recent win rate is only ${winRate}% over ${resolved} scored commitments. Edge15 shifts into MAX protection: fewer entries, stronger cushion, and more NO TRADE calls.`,
+    };
+  }
+  if (resolved >= 5 && winRate !== null && winRate < 70) {
+    return {
+      mode: 'STRICT',
+      recentWinRate: winRate,
+      recentResolved: resolved,
+      extraScoreNeeded: 6,
+      tone: 'warn',
+      message: `Recent win rate is ${winRate}% over ${resolved} scored commitments. Edge15 tightens entry standards until performance improves.`,
+    };
+  }
+  return {
+    mode: 'NORMAL',
+    recentWinRate: winRate,
+    recentResolved: resolved,
+    extraScoreNeeded: 0,
+    tone: winRate !== null && winRate >= 75 ? 'good' : 'blue',
+    message: resolved ? `Recent win rate is ${winRate}% over ${resolved} scored commitments. Normal guardrails stay active.` : 'Waiting for enough scored commitments before auto-tightening performance gates.',
+  };
+}
+
+function buildLateFlipRisk(history: SignalHistoryPoint[], countdown: Countdown): FlipRisk {
+  const directional = history.filter((point) => point.direction === 'OVER' || point.direction === 'UNDER');
+  let flips = 0;
+  for (let i = 1; i < directional.length; i += 1) {
+    if (directional[i].direction !== directional[i - 1].direction) flips += 1;
+  }
+  const recentFlip = directional.length >= 2 && directional[directional.length - 1].direction !== directional[directional.length - 2].direction;
+  const late = countdown.remainingMs <= 300000;
+  if (late && (flips >= 3 || (flips >= 2 && recentFlip))) {
+    return { level: 'High', flips, recentFlip, tone: 'bad', message: `High flip risk: ${flips} direction changes in the recent signal history${recentFlip ? ', including the latest refresh' : ''}. Late-window flips are a major reason Edge15 has been losing.` };
+  }
+  if (flips >= 2 || (late && recentFlip)) {
+    return { level: 'Medium', flips, recentFlip, tone: 'warn', message: `Medium flip risk: ${flips} recent direction changes. Edge15 should be selective and avoid chasing.` };
+  }
+  return { level: 'Low', flips, recentFlip, tone: 'good', message: `Low flip risk: ${flips} recent direction changes. Signal history is not overly jumpy.` };
+}
+
+function applyGenesis17Protection(decision: Decision, autoTightening: AutoTighteningProfile, flipRisk: FlipRisk, countdown: Countdown): Decision {
+  const messages: string[] = [];
+  let confidencePenalty = 0;
+  let opportunityPenalty = 0;
+  let forceAvoid = false;
+  let blockEnter = false;
+
+  if (autoTightening.mode === 'STRICT') {
+    confidencePenalty += 4;
+    opportunityPenalty += 6;
+    if (decision.entryScore < 78) blockEnter = true;
+    messages.push('Auto-tightening is STRICT because recent performance is below target. Edge15 requires a stronger setup before ENTER.');
+  }
+  if (autoTightening.mode === 'MAX') {
+    confidencePenalty += 8;
+    opportunityPenalty += 12;
+    if (decision.entryScore < 84 || decision.settlement.risk !== 'Low') blockEnter = true;
+    messages.push('Auto-tightening is MAX because recent performance is poor. Edge15 should skip anything that is not extremely clean.');
+  }
+  if (flipRisk.level === 'High' && countdown.remainingMs <= 300000) {
+    confidencePenalty += 10;
+    opportunityPenalty += 16;
+    blockEnter = true;
+    forceAvoid = countdown.remainingMs <= 180000;
+    messages.push('Late flip detector is HIGH. Edge15 blocks fresh entries because the signal is changing too much near settlement.');
+  }
+
+  if (!messages.length) return decision;
+
+  const confidence = Math.max(0, decision.confidence - confidencePenalty);
+  const opportunity = Math.max(0, decision.opportunity - opportunityPenalty);
+  let action = decision.action;
+  if (blockEnter && action.startsWith('ENTER')) action = decision.direction === 'NONE' ? 'WAIT' : `WATCH ${decision.direction}` as Decision['action'];
+  if (forceAvoid) action = 'AVOID';
+  const tone: Tone = action === 'AVOID' ? 'bad' : action.startsWith('WATCH') || action.startsWith('LEAN') ? 'warn' : decision.tone;
+  const guardrails = [...messages, ...decision.guardrails].slice(0, 5);
+  return {
+    ...decision,
+    action,
+    tone,
+    confidence,
+    opportunity,
+    opportunityLabel: opportunity >= 88 ? 'Excellent' : opportunity >= 74 ? 'Good' : opportunity >= 56 ? 'Developing' : opportunity >= 38 ? 'Thin' : 'Poor',
+    guardrails,
+    reason: guardrails[0] ?? decision.reason,
+    whyNot: [...guardrails, ...decision.whyNot].slice(0, 5),
+  };
+}
+
+function buildTradeQuality(decision: Decision, activeSignal: SignalPlan | null, countdown: Countdown, snapshot: MarketSnapshot, autoTightening: AutoTighteningProfile, flipRisk: FlipRisk): TradeQuality {
+  const direction = activeSignal?.direction ?? decision.direction;
+  const distance = Math.abs(decision.distanceToReference ?? 0);
+  const oddsAsk = direction === 'OVER' ? snapshot.kalshi?.yesAsk ?? null : direction === 'UNDER' ? snapshot.kalshi?.noAsk ?? null : null;
+  const payoutPenalty = oddsAsk === null ? (countdown.remainingMs <= 240000 ? 16 : 6) : oddsAsk >= 92 ? 24 : oddsAsk >= 88 ? 14 : oddsAsk >= 82 ? 6 : 0;
+  const settlementPenalty = decision.settlement.risk === 'Extreme' ? 34 : decision.settlement.risk === 'High' ? 24 : decision.settlement.risk === 'Medium' ? 10 : 0;
+  const flipPenalty = flipRisk.level === 'High' ? 24 : flipRisk.level === 'Medium' ? 10 : 0;
+  const tighteningPenalty = autoTightening.mode === 'MAX' ? 14 : autoTightening.mode === 'STRICT' ? 7 : 0;
+  const latePenalty = countdown.remainingMs <= 180000 ? 18 : countdown.remainingMs <= 300000 ? 8 : 0;
+  const distanceBonus = decision.distanceToReference === null ? 0 : Math.min(12, distance / 5);
+  const base = decision.entryScore * 0.34 + decision.opportunity * 0.24 + decision.confidence * 0.18 + decision.stability * 0.16 + distanceBonus;
+  const score = Math.round(Math.max(0, Math.min(100, base - payoutPenalty - settlementPenalty - flipPenalty - tighteningPenalty - latePenalty)));
+  const label: TradeQuality['label'] = score >= 82 ? 'STRONG' : score >= 68 ? 'DECENT' : score >= 52 ? 'WEAK' : 'AVOID';
+  const tone: Tone = label === 'STRONG' ? 'good' : label === 'DECENT' ? 'blue' : label === 'WEAK' ? 'warn' : 'bad';
+  const reasons: string[] = [];
+  if (payoutPenalty >= 14) reasons.push('payout value is thin');
+  if (settlementPenalty >= 10) reasons.push(`settlement risk is ${decision.settlement.risk}`);
+  if (flipPenalty >= 10) reasons.push(`flip risk is ${flipRisk.level}`);
+  if (autoTightening.mode !== 'NORMAL') reasons.push(`auto-tightening is ${autoTightening.mode}`);
+  if (latePenalty >= 8) reasons.push('window is late');
+  const message = reasons.length ? `${label}: ${reasons.join(', ')}.` : `${label}: signal, timing, value, and stability are acceptable.`;
+  return { label, score, message, tone };
+}
 
 function PerformanceTrackerPanel({ records }: { records: CommitmentAccuracyRecord[] }) {
   const windows = buildPerformanceWindows(records);
@@ -781,8 +981,14 @@ function resolveCommitmentOutcome(plan: SignalPlan, candles: MarketSnapshot['can
       resolvedAt: new Date().toISOString(),
       open: null,
       close: null,
-      entryScore: null,
-      confidence: null,
+      entryScore: plan.committedEntryScore ?? null,
+      confidence: plan.committedConfidence ?? null,
+      tradeGrade: plan.committedTradeGrade ?? null,
+      settlementRisk: plan.committedSettlementRisk ?? null,
+      priceAtCommit: plan.committedPrice ?? null,
+      distanceAtCommit: plan.committedDistance ?? null,
+      flipRiskAtCommit: null,
+      tradeQualityAtCommit: null,
       source: 'auto_observed',
     };
   }
@@ -800,8 +1006,14 @@ function resolveCommitmentOutcome(plan: SignalPlan, candles: MarketSnapshot['can
     resolvedAt: new Date().toISOString(),
     open: first.open,
     close: last.close,
-    entryScore: null,
-    confidence: null,
+    entryScore: plan.committedEntryScore ?? null,
+    confidence: plan.committedConfidence ?? null,
+    tradeGrade: plan.committedTradeGrade ?? null,
+    settlementRisk: plan.committedSettlementRisk ?? null,
+    priceAtCommit: plan.committedPrice ?? null,
+    distanceAtCommit: plan.committedDistance ?? null,
+    flipRiskAtCommit: null,
+    tradeQualityAtCommit: null,
     source: 'auto_observed',
   };
 }
@@ -1001,7 +1213,7 @@ function buildValueGate(direction: SignalDirection, countdown: Countdown, snapsh
   };
 }
 
-function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, countdown: Countdown, qualityFilter: QualityFilter, snapshot: MarketSnapshot): EntryGate[] {
+function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, countdown: Countdown, qualityFilter: QualityFilter, snapshot: MarketSnapshot, autoTightening: AutoTighteningProfile, flipRisk: FlipRisk, tradeQuality: TradeQuality): EntryGate[] {
   const direction = activeSignal?.direction ?? decision.direction;
   const stability = activeSignal?.stability ?? decision.stability;
   const confirmations = activeSignal?.confirmations ?? 0;
@@ -1045,10 +1257,28 @@ function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, co
     {
       label: 'Settlement risk',
       passed: decision.settlement.risk === 'Low',
-      detail: `${decision.settlement.risk}. Clean ENTER needs Low settlement risk in Genesis-016. ${decision.settlement.message}`,
+      detail: `${decision.settlement.risk}. Clean ENTER needs Low settlement risk in Genesis-017. ${decision.settlement.message}`,
       severity: decision.settlement.risk === 'Extreme' || decision.settlement.risk === 'High' ? 'block' : 'warn',
     },
     buildValueGate(direction, countdown, snapshot),
+    {
+      label: 'Late flip risk',
+      passed: flipRisk.level !== 'High' || countdown.remainingMs > 300000,
+      detail: flipRisk.message,
+      severity: flipRisk.level === 'High' && countdown.remainingMs <= 300000 ? 'block' : flipRisk.level === 'Medium' ? 'warn' : 'ok',
+    },
+    {
+      label: 'Auto-tightening',
+      passed: autoTightening.mode === 'NORMAL' || decision.entryScore >= 78 + autoTightening.extraScoreNeeded,
+      detail: autoTightening.message,
+      severity: autoTightening.mode === 'MAX' ? 'block' : autoTightening.mode === 'STRICT' ? 'warn' : 'ok',
+    },
+    {
+      label: 'Trade Quality',
+      passed: tradeQuality.label === 'STRONG' || tradeQuality.label === 'DECENT',
+      detail: `${tradeQuality.label} at ${tradeQuality.score}/100. ${tradeQuality.message}`,
+      severity: tradeQuality.label === 'AVOID' ? 'block' : tradeQuality.label === 'WEAK' ? 'warn' : 'ok',
+    },
     {
       label: 'Quality filter',
       passed: gradeValue >= neededGrade,
@@ -1059,7 +1289,7 @@ function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, co
 
 function buildLateEntryWarning(decision: Decision, countdown: Countdown) {
   if (countdown.remainingMs > 360000) return null;
-  if (countdown.remainingMs <= 180000) return `Only ${countdown.display} remains. Genesis-016 blocks fresh late entries because the last 3 minutes are too jumpy and the payout is often too small.`;
+  if (countdown.remainingMs <= 180000) return `Only ${countdown.display} remains. Genesis-017 blocks fresh late entries because the last 3 minutes are too jumpy and the payout is often too small.`;
   if (decision.settlement.risk === 'Low' && decision.entryScore >= 82) return null;
   const required = decision.settlement.requiredMove === null ? 'unknown' : `$${decision.settlement.requiredMove.toFixed(0)}`;
   const realistic = decision.settlement.realisticMove === null ? 'unknown' : `$${decision.settlement.realisticMove.toFixed(0)}`;
