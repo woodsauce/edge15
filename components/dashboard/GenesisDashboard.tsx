@@ -128,6 +128,27 @@ type EntryValue = {
   tone: Tone;
 };
 
+
+type PreCommitPreview = {
+  projectedPick: 'OVER' | 'UNDER' | 'NO TRADE';
+  wouldLockNow: 'YES' | 'NO';
+  strength: number;
+  timeUntilLock: string;
+  message: string;
+  changes: string[];
+  tone: Tone;
+};
+
+type PositionExitRead = {
+  status: 'HOLD' | 'WATCH CLOSELY' | 'DANGER' | 'CASH OUT SIGNAL';
+  holdQuality: 'STRONG' | 'OK' | 'WEAK' | 'BROKEN';
+  score: number;
+  profitProtection: string;
+  salvageWarning: string;
+  reasons: string[];
+  tone: Tone;
+};
+
 type TimingLabRow = {
   label: string;
   wins: number;
@@ -577,7 +598,7 @@ export function GenesisDashboard() {
   function buildPerformanceBackup() {
     return {
       app: 'Edge15',
-      release: 'Genesis-024',
+      release: 'Genesis-025',
       exportedAt: new Date().toISOString(),
       storageKeys: {
         commitmentAccuracy: COMMITMENT_ACCURACY_STORAGE_KEY,
@@ -608,7 +629,7 @@ export function GenesisDashboard() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `edge15-genesis-024-performance-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `edge15-genesis-025-performance-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -881,6 +902,8 @@ export function GenesisDashboard() {
   const activeSignal = signalPlan;
   const tradeQuality = useMemo(() => buildTradeQuality(decision, activeSignal, countdown, snapshot, autoTightening, flipRisk), [decision, activeSignal, countdown, snapshot, autoTightening, flipRisk]);
   const entryValue = useMemo(() => buildEntryValue(decision, activeSignal, countdown, snapshot, tradeQuality, autoTightening, flipRisk, commitTimingLab, strategyProfileLab), [decision, activeSignal, countdown, snapshot, tradeQuality, autoTightening, flipRisk, commitTimingLab, strategyProfileLab]);
+  const preCommitPreview = useMemo(() => buildPreCommitPreview(decision, activeSignal, countdown, tradeQuality, entryValue, flipRisk), [decision, activeSignal, countdown, tradeQuality, entryValue, flipRisk]);
+  const positionExitRead = useMemo(() => position && positionAssessment ? buildPositionExitRead(position, positionAssessment, decision, countdown, tradeQuality, entryValue, flipRisk) : null, [position, positionAssessment, decision, countdown, tradeQuality, entryValue, flipRisk]);
   const adaptiveCommitRead = useMemo(() => buildAdaptiveCommitRead({ decision, activeSignal, countdown, snapshot, entryValue, tradeQuality, autoTightening, flipRisk }), [decision, activeSignal, countdown, snapshot, entryValue, tradeQuality, autoTightening, flipRisk]);
   const entryGates = useMemo(() => buildEntryGates(decision, activeSignal, countdown, qualityFilter, snapshot, autoTightening, flipRisk, tradeQuality), [decision, activeSignal, countdown, qualityFilter, snapshot, autoTightening, flipRisk, tradeQuality]);
   const lateWarning = useMemo(() => buildLateEntryWarning(decision, countdown), [decision, countdown]);
@@ -905,14 +928,14 @@ export function GenesisDashboard() {
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-024</div>
+          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-025</div>
           <h1 className="text-3xl font-black tracking-tight">Edge15</h1>
         </div>
         <div className="flex flex-col items-end gap-2">
           <div className={`rounded-full border px-3 py-2 text-xs ${priceFeedLive ? 'border-edge-green/40 bg-edge-green/10 text-edge-green' : 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber'}`}>
             {priceFeedLive ? 'Price feed live' : 'Price feed degraded'}
           </div>
-          <div className="hidden rounded-full border border-edge-line bg-black/20 px-3 py-1 text-[11px] text-edge-muted sm:block">Tracker reliability • logic unchanged</div>
+          <div className="hidden rounded-full border border-edge-line bg-black/20 px-3 py-1 text-[11px] text-edge-muted sm:block">6m commit • pre-commit preview • exit guard</div>
         </div>
       </header>
 
@@ -933,6 +956,7 @@ export function GenesisDashboard() {
                   {highlightText(tradePlanHelp(activeSignal?.status, activeSignal?.direction ?? decision.direction))}
                 </div>
                 {activeSignal ? <CommitmentStatusCard signal={activeSignal} countdown={countdown} /> : null}
+                <PreCommitPreviewCard preview={preCommitPreview} />
               </div>
             </div>
           </div>
@@ -1008,6 +1032,7 @@ export function GenesisDashboard() {
               </div>
               <div className="mt-4 rounded-2xl border border-edge-line bg-black/20 p-4 text-sm leading-6 text-slate-200">{positionAssessment.story}</div>
               {stillEnter ? <div className={`mt-3 rounded-2xl border p-4 text-sm leading-6 ${stillEnter.tone === 'good' ? 'border-edge-green/30 bg-edge-green/10 text-edge-green' : stillEnter.tone === 'bad' ? 'border-edge-red/30 bg-edge-red/10 text-edge-red' : 'border-edge-amber/30 bg-edge-amber/10 text-edge-amber'}`}><span className="font-black">Would Edge15 still enter now? {stillEnter.answer}.</span> {stillEnter.reason}</div> : null}
+              {positionExitRead ? <PositionExitPanel read={positionExitRead} /> : null}
               <button onClick={clearPosition} className="mt-4 w-full rounded-xl border border-edge-line bg-slate-950 px-3 py-3 text-sm font-bold text-white hover:border-edge-blue/60">Clear / contract ended</button>
             </div>
           ) : (
@@ -1089,12 +1114,12 @@ export function GenesisDashboard() {
       ) : null}
 
       {visibleSections.genesisStatus ? (
-        <Panel title="Genesis-024 status">
+        <Panel title="Genesis-025 status">
           <ul className="list-disc space-y-2 pl-5 text-sm text-edge-muted">
             <li>Commitment Accuracy Tracker grades Edge15's locked contract predictions for the last 10 completed windows.</li>
             <li>Market microstructure now uses Coinbase level-2 order book spread, depth, and imbalance as another professional-style data read.</li>
-            <li>Genesis-024 changes the live commitment checkpoint to 8:00 remaining for testing.</li>
-            <li>Genesis-024 preserves the Genesis-017/022 guardrails and tests an 8:00-left live commitment point.</li>
+            <li>Genesis-025 moves the live commitment checkpoint back to 6:00 remaining based on timing-lab results.</li>
+            <li>Genesis-025 preserves the Genesis-017/022 guardrails, keeps 8:00/adaptive testing in labs, and adds position exit management.</li>
           </ul>
         </Panel>
       ) : null}
@@ -1290,7 +1315,7 @@ function StrategyProfileLabPanel({ records }: { records: StrategyProfileRecord[]
       <div className="grid gap-3 sm:grid-cols-3">
         <Metric label="Best Profile" value={best ? best.label : 'Collecting'} detail={best ? `${best.winRate}% • ${best.wins}-${best.losses}` : 'Need 5+ scored'} help="Shadow-tests trading styles once per window. It does not change the live recommendation." tone={best && (best.winRate ?? 0) >= 75 ? 'good' : 'blue'} />
         <Metric label="Profiles" value={`${STRATEGY_PROFILES.length}`} detail="Shadow tested" help="Aggressive, balanced, selective, ultra-selective, value-only, and no-chase profiles are graded separately." tone="neutral" />
-        <Metric label="Live Logic" value="8m Test" detail="Experimental commit timing" help="Genesis-024 tests an 8:00-left live commitment while keeping the Genesis-017/020 guardrails active." tone="blue" />
+        <Metric label="Live Logic" value="6m Commit" detail="Timing-lab winner" help="Genesis-025 returns live commitment to 6:00 remaining while keeping 8:00, 4:00, 3:00, strategy, and adaptive tests in the labs." tone="blue" />
       </div>
       <div className="mt-4 overflow-hidden rounded-2xl border border-edge-line">
         <div className="grid grid-cols-[96px_72px_64px_74px_1fr] gap-2 bg-black/30 px-3 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-edge-muted">
@@ -1307,7 +1332,7 @@ function StrategyProfileLabPanel({ records }: { records: StrategyProfileRecord[]
         ))}
       </div>
       <div className="mt-3 rounded-2xl border border-edge-line bg-black/20 p-3 text-xs leading-5 text-edge-muted">
-        Captures happen around the same 8:00-left test decision point. Later, we can combine this with the Commit Timing Lab to pick the best timing and the best profile together.
+        Captures remain a lab read. Later, we can combine this with Commit Timing Lab data to pick the best timing and the best profile together.
       </div>
     </Panel>
   );
@@ -1351,7 +1376,7 @@ function PerformanceBackupPanel({
   return (
     <Panel title="Backup + compare">
       <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-        <Metric label="Current version" value="Genesis-024" detail="adaptive lab" help="Genesis-024 preserves the Genesis-023 live 8:00 test and adds an adaptive commit shadow lab. It protects your results and makes side-by-side testing easier." tone="blue" />
+        <Metric label="Current version" value="Genesis-025" detail="adaptive lab" help="Genesis-025 uses a 6:00 live commit, keeps the adaptive shadow lab, and adds pre-commit preview plus position exit management." tone="blue" />
         <Metric label="All-time read" value={bestLabel} detail={allTime.winRate === null ? 'No scored records' : `${allTime.winRate}% • ${allTime.wins}-${allTime.losses}`} help="Quick version-comparison label from this browser's stored performance records." tone={bestTone} />
         <Metric label="Last hour" value={recent.winRate === null ? '—' : `${recent.winRate}%`} detail={`W/L ${recent.wins}-${recent.losses}`} help="Useful when comparing multiple Genesis versions side by side over the same test window." tone={recent.winRate === null ? 'neutral' : recent.winRate >= 75 ? 'good' : recent.winRate >= 60 ? 'warn' : 'bad'} />
       </div>
@@ -1376,7 +1401,7 @@ function TradeQualityPanel({ quality, autoTightening, flipRisk }: { quality: Tra
         <Metric label="Late Flip Risk" value={flipRisk.level} detail={`${flipRisk.flips} recent flips`} help={flipRisk.message} tone={flipRisk.tone} />
       </div>
       <div className="mt-3 rounded-2xl border border-edge-line bg-black/20 p-3 text-xs leading-5 text-edge-muted">
-        Genesis-024 uses this score as the cockpit read: prediction strength is not enough unless value, stability, flip risk, and recent model performance are acceptable.
+        Genesis-025 uses this score as the cockpit read: prediction strength is not enough unless value, stability, flip risk, and recent model performance are acceptable.
       </div>
     </Panel>
   );
@@ -1398,7 +1423,7 @@ function TradeReplayPanel({ records }: { records: CommitmentAccuracyRecord[] }) 
           </div>
         ))}
       </div>
-      <div className="mt-3 text-xs leading-5 text-edge-muted">Replay records help identify bad setups without manual buttons. Older records may not have every Genesis-024 snapshot field until new commitments are created.</div>
+      <div className="mt-3 text-xs leading-5 text-edge-muted">Replay records help identify bad setups without manual buttons. Older records may not have every Genesis-025 snapshot field until new commitments are created.</div>
     </Panel>
   );
 }
@@ -1509,7 +1534,7 @@ function buildTradeQuality(decision: Decision, activeSignal: SignalPlan | null, 
   const direction = activeSignal?.direction ?? decision.direction;
   const distance = Math.abs(decision.distanceToReference ?? 0);
   const oddsAsk = direction === 'OVER' ? snapshot.kalshi?.yesAsk ?? null : direction === 'UNDER' ? snapshot.kalshi?.noAsk ?? null : null;
-  const payoutPenalty = oddsAsk === null ? (countdown.remainingMs <= 240000 ? 16 : 6) : oddsAsk >= 92 ? 24 : oddsAsk >= 88 ? 14 : oddsAsk >= 82 ? 6 : 0;
+  const payoutPenalty = oddsAsk === null ? (countdown.remainingMs <= 180000 ? 10 : 3) : oddsAsk >= 92 ? 24 : oddsAsk >= 88 ? 14 : oddsAsk >= 82 ? 6 : 0;
   const settlementPenalty = decision.settlement.risk === 'Extreme' ? 34 : decision.settlement.risk === 'High' ? 24 : decision.settlement.risk === 'Medium' ? 10 : 0;
   const flipPenalty = flipRisk.level === 'High' ? 24 : flipRisk.level === 'Medium' ? 10 : 0;
   const tighteningPenalty = autoTightening.mode === 'MAX' ? 14 : autoTightening.mode === 'STRICT' ? 7 : 0;
@@ -1529,6 +1554,48 @@ function buildTradeQuality(decision: Decision, activeSignal: SignalPlan | null, 
   return { label, score, message, tone };
 }
 
+
+
+function buildPreCommitPreview(decision: Decision, activeSignal: SignalPlan | null, countdown: Countdown, tradeQuality: TradeQuality, entryValue: EntryValue, flipRisk: FlipRisk): PreCommitPreview {
+  if (activeSignal?.commitmentStatus === 'COMMITTED') {
+    return {
+      projectedPick: activeSignal.committedDirection === 'OVER' || activeSignal.committedDirection === 'UNDER' ? activeSignal.committedDirection : 'NO TRADE',
+      wouldLockNow: 'YES',
+      strength: Math.round((activeSignal.committedConfidence ?? decision.confidence) * 0.45 + tradeQuality.score * 0.35 + entryValue.score * 0.2),
+      timeUntilLock: 'Locked',
+      tone: activeSignal.committedDirection === 'OVER' || activeSignal.committedDirection === 'UNDER' ? 'good' : 'neutral',
+      message: `Edge15 already locked ${activeSignal.committedDirection}. The side will not flip this contract; position-management signals handle risk from here.`,
+      changes: ['Only risk status can change now', 'Use Hold / Watch / Cash-Out Guard after entry', 'No late side-flipping', 'Next window resets the preview'],
+    };
+  }
+  if (activeSignal?.commitmentStatus === 'NO TRADE') {
+    return {
+      projectedPick: 'NO TRADE',
+      wouldLockNow: 'YES',
+      strength: Math.max(0, Math.min(100, Math.round((100 - tradeQuality.score) * 0.45 + (100 - entryValue.score) * 0.25 + 20))),
+      timeUntilLock: 'Locked',
+      tone: 'neutral',
+      message: 'Edge15 already committed NO TRADE for this contract. It will not chase a late prediction.',
+      changes: ['Wait for next contract', 'No fresh chase entries', 'Keep watching timing labs', 'Use this as safety data'],
+    };
+  }
+
+  const secondsToLock = Math.max(0, Math.ceil((9 * 60 * 1000 - countdown.elapsedMs) / 1000));
+  const timeUntilLock = secondsToLock <= 0 ? 'Due now' : `${Math.floor(secondsToLock / 60)}:${String(secondsToLock % 60).padStart(2, '0')}`;
+  const strength = Math.round(Math.max(0, Math.min(100, decision.confidence * 0.26 + decision.opportunity * 0.22 + decision.stability * 0.16 + tradeQuality.score * 0.22 + entryValue.score * 0.14)));
+  const side = activeSignal?.direction && activeSignal.direction !== 'NONE' ? activeSignal.direction : decision.direction;
+  const sideIsPlayable = side !== 'NONE' && tradeQuality.score >= 62 && entryValue.score >= 45 && decision.settlement.risk !== 'High' && decision.settlement.risk !== 'Extreme' && flipRisk.level !== 'High';
+  const projectedPick: PreCommitPreview['projectedPick'] = sideIsPlayable ? side : 'NO TRADE';
+  const wouldLockNow: PreCommitPreview['wouldLockNow'] = secondsToLock <= 0 && sideIsPlayable ? 'YES' : 'NO';
+  const tone: Tone = projectedPick === 'NO TRADE' ? (strength >= 68 ? 'warn' : 'neutral') : strength >= 76 ? 'good' : strength >= 62 ? 'blue' : 'warn';
+  const message = projectedPick === 'NO TRADE'
+    ? `At the 6:00 lock, Edge15 is currently projecting NO TRADE unless quality/value improves. Trade Quality is ${tradeQuality.label}; Entry Value is ${entryValue.label}; flip risk is ${flipRisk.level}.`
+    : `At the 6:00 lock, Edge15 is currently leaning ${projectedPick}. This is a preview, not the locked commitment yet.`;
+  const changes = projectedPick === 'NO TRADE'
+    ? ['Trade Quality improves to DECENT/STRONG', 'Entry Value improves to FAIR/GOOD', 'Flip risk stays Low or Medium', 'Price moves away from strike cleanly']
+    : [`Signal flips away from ${projectedPick}`, 'Entry Value drops to BAD', 'Trade Quality weakens', 'Late flip risk jumps to High'];
+  return { projectedPick, wouldLockNow, strength, timeUntilLock, message, changes, tone };
+}
 
 
 function TrackerStatusPanel({ status, recheckStatus, onRecheck }: { status: TrackerStatus; recheckStatus: string; onRecheck: () => void }) {
@@ -1606,7 +1673,7 @@ function EntryValuePanel({ value }: { value: EntryValue }) {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
         <Metric label="Entry Value" value={value.label} detail={`${value.score}/100 value score`} help="This asks whether the current price is worth paying, not just whether Edge15 picked the right side." tone={value.tone} />
         <Metric label="Estimated Win" value={value.estimatedWinProbability === null ? '—' : `${value.estimatedWinProbability}%`} detail={value.side === 'NONE' ? 'No side yet' : value.side} help="Edge15's rough probability estimate from confidence, opportunity, stability, trade quality, and lab results." tone={value.estimatedWinProbability !== null && value.estimatedWinProbability >= 70 ? 'good' : value.estimatedWinProbability !== null && value.estimatedWinProbability >= 58 ? 'warn' : 'neutral'} />
-        <Metric label="Market Ask" value={value.askCents === null ? 'Unavailable' : `${value.askCents}¢`} detail={value.grossProfitCents === null ? 'Need Kalshi ask' : `Upside ${value.grossProfitCents}¢ • risk ${value.riskCents}¢`} help="A cheap entry can be valuable if Edge15 has real edge. An expensive entry can be bad even when the prediction is likely correct." tone={value.askCents === null ? 'warn' : value.askCents <= 70 ? 'good' : value.askCents <= 86 ? 'warn' : 'bad'} />
+        <Metric label="Market Ask" value={value.askCents === null ? 'Unavailable' : `${value.askCents}¢`} detail={value.grossProfitCents === null ? 'Model-only value' : `Upside ${value.grossProfitCents}¢ • risk ${value.riskCents}¢`} help="A cheap entry can be valuable if Edge15 has real edge. When Kalshi ask is unavailable, Edge15 falls back to model-only value and does not pretend it knows the real payout." tone={value.askCents === null ? 'warn' : value.askCents <= 70 ? 'good' : value.askCents <= 86 ? 'warn' : 'bad'} />
         <Metric label="Estimated Edge" value={value.edgePct === null ? '—' : `${value.edgePct >= 0 ? '+' : ''}${value.edgePct}%`} detail="Win estimate minus ask" help="Positive means Edge15 thinks its probability is higher than the market price. Negative means the trade may be overpriced." tone={value.edgePct === null ? 'neutral' : value.edgePct >= 8 ? 'good' : value.edgePct >= 0 ? 'warn' : 'bad'} />
       </div>
       <div className={`mt-3 rounded-2xl border p-3 text-xs leading-5 ${badgeClass(value.tone)}`}>
@@ -1636,8 +1703,8 @@ function EarlyEntryLabPanel({ entryValue, timingRecords, profileRecords, countdo
   return (
     <Panel title="Early Entry Lab">
       <div className="grid gap-3 sm:grid-cols-4">
-        <Metric label="Current Phase" value={currentPhase} detail={countdown.display} help="Genesis-024 live mode is testing the 8:00-left live commitment point while value evidence builds." tone="blue" />
-        <Metric label="Clean Early" value={cleanEarlyArmed ? 'ARMED' : 'WAIT'} detail={entryValue.label} help="ARMED means Edge15 sees enough value to consider the 8:00-left test point cleaner than waiting." tone={cleanEarlyArmed ? 'good' : 'warn'} />
+        <Metric label="Current Phase" value={currentPhase} detail={countdown.display} help="Genesis-025 live mode locks at 6:00 remaining while value evidence keeps building in the labs." tone="blue" />
+        <Metric label="Clean Early" value={cleanEarlyArmed ? 'ARMED' : 'WAIT'} detail={entryValue.label} help="ARMED means Edge15 sees enough value to consider an earlier clean setup in the lab, but live lock remains 6:00." tone={cleanEarlyArmed ? 'good' : 'warn'} />
         <Metric label="Best Early Slot" value={bestEarly ? bestEarly.label : 'Collecting'} detail={bestEarly ? `${bestEarly.winRate ?? '—'}% • edge ${bestEarly.valueEdge === null ? '—' : bestEarly.valueEdge}` : 'Need 5+ scored'} help="Compares 10:00, 8:00, and 6:00 checkpoints for early value opportunities." tone={bestEarly && bestEarly.valueScore >= 65 ? 'good' : 'blue'} />
         <Metric label="4m vs 3m" value={fourMinute && threeMinute ? `${fourMinute.winRate ?? '—'} / ${threeMinute.winRate ?? '—'}%` : 'Collecting'} detail="accuracy check" help="4:00 may be the best usable balance; 3:00 may be accurate but too late/expensive without strong value." tone="warn" />
       </div>
@@ -1659,7 +1726,7 @@ function EarlyEntryLabPanel({ entryValue, timingRecords, profileRecords, countdo
         ))}
       </div>
       <div className="mt-3 rounded-2xl border border-edge-blue/30 bg-edge-blue/10 p-3 text-xs leading-5 text-edge-blue">
-        Genesis-024 actively tests the 8:00-left live commitment point while continuing to observe early-entry value. It still uses NO TRADE when value, quality, or stability are not clean enough.
+        Genesis-025 uses the 6:00 live commitment while continuing to observe early-entry value in the labs. It still uses NO TRADE when value, quality, or stability are not clean enough.
       </div>
     </Panel>
   );
@@ -1714,8 +1781,8 @@ function buildEntryValue(decision: Decision, activeSignal: SignalPlan | null, co
   const riskCents = askCents;
   const edgePct = askCents === null ? null : Math.round(estimatedWinProbability - askCents);
   const cheapButUnprovenBoost = askCents !== null && askCents >= 42 && askCents <= 62 && estimatedWinProbability >= 60 ? 8 : 0;
-  const expensivePenalty = askCents === null ? 8 : askCents >= 92 ? 22 : askCents >= 86 ? 12 : askCents >= 78 ? 5 : 0;
-  const edgeScore = edgePct === null ? -4 : edgePct * 1.45;
+  const expensivePenalty = askCents === null ? 3 : askCents >= 92 ? 22 : askCents >= 86 ? 12 : askCents >= 78 ? 5 : 0;
+  const edgeScore = edgePct === null ? 0 : edgePct * 1.45;
   const rewardScore = askCents === null ? 0 : clampLocal((100 - askCents) * 0.22, 0, 14);
   const score = Math.round(clampLocal(tradeQuality.score * 0.45 + estimatedWinProbability * 0.28 + edgeScore + rewardScore + cheapButUnprovenBoost - expensivePenalty - flipPenalty - latePenalty, 0, 100));
 
@@ -1727,13 +1794,13 @@ function buildEntryValue(decision: Decision, activeSignal: SignalPlan | null, co
   if (countdown.remainingMs <= 180000 && askCents !== null && askCents >= 82) label = label === 'GREAT' ? 'GOOD' : 'BAD';
   if (flipRisk.level === 'High' || decision.settlement.risk === 'Extreme') label = 'BAD';
   const tone: Tone = label === 'GREAT' || label === 'GOOD' ? 'good' : label === 'FAIR' ? 'warn' : 'bad';
-  const askRead = askCents === null ? 'Kalshi ask is unavailable, so price edge is estimated conservatively.' : `${side} ask is ${askCents}¢ with estimated win probability near ${estimatedWinProbability}%, giving estimated edge ${edgePct! >= 0 ? '+' : ''}${edgePct}%.`;
+  const askRead = askCents === null ? 'Kalshi ask is unavailable. Entry Value is in model-only mode, so Edge15 can estimate direction quality but cannot verify true payout edge.' : `${side} ask is ${askCents}¢ with estimated win probability near ${estimatedWinProbability}%, giving estimated edge ${edgePct! >= 0 ? '+' : ''}${edgePct}%.`;
   const lateRead = countdown.remainingMs <= 180000 ? ' Final-3-minute entries remain no-chase unless future data proves value is still strong.' : '';
   const message = label === 'BAD'
     ? `${askRead} Edge15 should avoid paying for this unless value improves.${lateRead}`
     : label === 'FAIR'
       ? `${askRead} This is watchable, but not clean enough to treat as a premium entry.${lateRead}`
-      : `${askRead} This is the type of price-versus-probability setup Genesis-024 is designed to track.${lateRead}`;
+      : `${askRead} This is the type of price-versus-probability setup Genesis-025 is designed to track.${lateRead}`;
 
   return {
     label,
@@ -1796,7 +1863,7 @@ function AdaptiveCommitLabPanel({ records, currentRead, countdown }: { records: 
         )) : <div className="border-t border-edge-line px-3 py-4 text-sm text-edge-muted">Waiting for the first adaptive shadow decision. It may commit early, wait into the value zone, or record NO TRADE before the final no-chase area.</div>}
       </div>
       <div className="mt-3 rounded-2xl border border-edge-blue/30 bg-edge-blue/10 p-3 text-xs leading-5 text-edge-blue">
-        Genesis-024 does not promote adaptive commits to live mode yet. It compares fixed 8:00 live testing against a shadow engine that can commit when the setup becomes ready.
+        Genesis-025 does not promote adaptive commits to live mode yet. It compares the 6:00 live lock against a shadow engine that can commit when the setup becomes ready.
       </div>
     </Panel>
   );
@@ -1851,7 +1918,7 @@ function buildAdaptiveCommitRead({ decision, activeSignal, countdown, snapshot, 
   if (remainingMs > 8 * 60 * 1000) {
     const earlyClean = tradeQuality.label === 'STRONG' && (entryValue.label === 'GOOD' || entryValue.label === 'GREAT') && score >= 82 && decision.confidence >= 68 && decision.stability >= 66;
     if (earlyClean) {
-      return { status: 'Committed', direction: side, shouldCapture: true, mode: 'EARLY_CLEAN', score, tone: 'good', reason: `Adaptive lab would commit ${side} early because Trade Quality is STRONG and Entry Value is ${entryValue.label} before the fixed 8:00 test point.` };
+      return { status: 'Committed', direction: side, shouldCapture: true, mode: 'EARLY_CLEAN', score, tone: 'good', reason: `Adaptive lab would commit ${side} early because Trade Quality is STRONG and Entry Value is ${entryValue.label} before the fixed 6:00 commit point.` };
     }
     return { status: 'Watching', direction: side, shouldCapture: false, mode: 'EARLY_CLEAN', score, tone: 'blue', reason: `Adaptive lab sees ${side}, but early evidence is not clean enough yet. It is waiting for value plus stability.` };
   }
@@ -1961,7 +2028,7 @@ function CommitTimingLabPanel({ records, countdown }: { records: CommitTimingRec
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="text-sm leading-6 text-slate-200">Shadow-tests decision checkpoints without changing live trading logic.</div>
-              <div className="mt-1 text-xs leading-5 text-edge-muted">Genesis-024 now shows timing value, not just accuracy. A perfect late read can still be a bad entry if the ask is too expensive.</div>
+              <div className="mt-1 text-xs leading-5 text-edge-muted">Genesis-025 now shows timing value, not just accuracy. A perfect late read can still be a bad entry if the ask is too expensive.</div>
             </div>
             <div className="rounded-full border border-edge-blue/40 bg-edge-blue/10 px-3 py-1 text-xs font-black text-edge-blue">
               Live logic unchanged
@@ -2009,7 +2076,7 @@ function CommitTimingLabPanel({ records, countdown }: { records: CommitTimingRec
             </div>
           </div>
           <div className="rounded-2xl border border-edge-amber/30 bg-edge-amber/10 p-3 text-xs leading-5 text-edge-amber">
-            Early checkpoints can pay better but need cleaner signal. Late checkpoints may predict better but often have weak payout. Genesis-024 starts measuring both sides of that tradeoff.
+            Early checkpoints can pay better but need cleaner signal. Late checkpoints may predict better but often have weak payout. Genesis-025 starts measuring both sides of that tradeoff.
           </div>
         </div>
       </div>
@@ -2228,62 +2295,40 @@ function resolveCommitTimingRecord(record: CommitTimingRecord, candles: MarketSn
 }
 
 function PerformanceTrackerPanel({ records }: { records: CommitmentAccuracyRecord[] }) {
-  const windows = buildPerformanceWindows(records);
-  const allTime = windows[0];
-  const tone = allTime.winRate === null ? 'neutral' : allTime.winRate >= 75 ? 'good' : allTime.winRate >= 60 ? 'warn' : 'bad';
+  const [allTime] = buildPerformanceWindows(records);
+  const tone = allTime.winRate === null ? 'neutral' : allTime.winRate >= 85 ? 'good' : allTime.winRate >= 70 ? 'warn' : 'bad';
+  const totalTracked = allTime.wins + allTime.losses + allTime.noTrades;
   return (
-    <Panel title="Performance tracker">
-      <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-        <Metric label="All-time W/L" value={`${allTime.wins}-${allTime.losses}`} detail={allTime.winRate === null ? 'No resolved trades yet' : `${allTime.winRate}% win rate`} help="Automatic wins and losses from Edge15's committed OVER/UNDER plans. NO TRADE is tracked separately and does not count as a loss." tone={tone} />
-        <Metric label="No Trades" value={`${allTime.noTrades}`} detail="Skipped commitments" help="A NO TRADE is Edge15 protecting you from a low-quality setup. It is not counted as a win or loss." tone="blue" />
-        <Metric label="Resolved" value={`${allTime.resolved}`} detail="Scored commitments" help="Number of completed committed OVER/UNDER calls stored in this browser." tone="neutral" />
-      </div>
-      <div className="mt-4 grid gap-2">
-        {windows.slice(1).map((window) => (
-          <div key={window.label} className="grid grid-cols-[88px_1fr_70px] items-center gap-2 rounded-xl border border-edge-line bg-black/20 px-3 py-2 text-xs">
-            <div className="font-black text-slate-200">{window.label}</div>
-            <div className="text-edge-muted">W/L {window.wins}-{window.losses} • No trade {window.noTrades}</div>
-            <div className={`text-right font-black ${window.winRate === null ? 'text-edge-muted' : window.winRate >= 75 ? 'text-edge-green' : window.winRate >= 60 ? 'text-edge-amber' : 'text-edge-red'}`}>{window.winRate === null ? '—' : `${window.winRate}%`}</div>
-          </div>
-        ))}
+    <Panel title="Long-term performance tracker">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+        <Metric label="All-time W/L" value={`${allTime.wins}-${allTime.losses}`} detail={allTime.winRate === null ? 'No resolved trades yet' : `${allTime.winRate}% win rate`} help="This is the long tracker that matters most: automatic wins and losses from committed OVER/UNDER plans. NO TRADE is separate and does not count as a loss." tone={tone} />
+        <Metric label="No Trades" value={`${allTime.noTrades}`} detail="Safety skips" help="NO TRADE means Edge15 refused a low-quality setup. It protects the win rate but should be tracked separately from scored trades." tone="blue" />
+        <Metric label="Scored Trades" value={`${allTime.resolved}`} detail="Wins + losses" help="Only committed OVER/UNDER plans count here. This is the sample size for the all-time win rate." tone="neutral" />
+        <Metric label="Stored Total" value={`${totalTracked}`} detail="All-time local records" help="Records are stored in this browser. Export/backup before clearing cache or switching devices." tone="neutral" />
       </div>
       <div className="mt-3 rounded-2xl border border-edge-amber/30 bg-edge-amber/10 p-3 text-xs leading-5 text-edge-amber">
-        Automatic while Edge15 is open. If every device is closed, a future cloud watcher is needed to keep scoring windows in the background.
+        Time-window rows were removed. Genesis-025 focuses on long-term all-time W/L because that is the cleaner scorecard while we dial the model.
       </div>
     </Panel>
   );
 }
 
 function buildPerformanceWindows(records: CommitmentAccuracyRecord[]): PerformanceWindow[] {
-  const windows: Array<{ label: string; hours: number | null }> = [
-    { label: 'All time', hours: null },
-    { label: '1 hour', hours: 1 },
-    { label: '4 hours', hours: 4 },
-    { label: '12 hours', hours: 12 },
-    { label: '24 hours', hours: 24 },
-  ];
-  const nowMs = Date.now();
-  return windows.map((window) => {
-    const filtered = records.filter((record) => {
-      if (window.hours === null) return true;
-      const resolvedMs = Date.parse(record.resolvedAt);
-      return Number.isFinite(resolvedMs) && nowMs - resolvedMs <= window.hours * 60 * 60 * 1000;
-    });
-    const scored = filtered.filter((record) => record.correct !== null);
-    const wins = scored.filter((record) => record.correct === true).length;
-    const losses = scored.filter((record) => record.correct === false).length;
-    const noTrades = filtered.filter((record) => record.committedDirection === 'NONE').length;
-    const resolved = wins + losses;
-    return {
-      label: window.label,
-      hours: window.hours,
-      wins,
-      losses,
-      noTrades,
-      resolved,
-      winRate: resolved ? Math.round((wins / resolved) * 100) : null,
-    };
-  });
+  const filtered = records;
+  const scored = filtered.filter((record) => record.correct !== null);
+  const wins = scored.filter((record) => record.correct === true).length;
+  const losses = scored.filter((record) => record.correct === false).length;
+  const noTrades = filtered.filter((record) => record.committedDirection === 'NONE').length;
+  const resolved = wins + losses;
+  return [{
+    label: 'All time',
+    hours: null,
+    wins,
+    losses,
+    noTrades,
+    resolved,
+    winRate: resolved ? Math.round((wins / resolved) * 100) : null,
+  }];
 }
 
 function CommitmentAccuracyPanel({ records, activeSignal }: { records: CommitmentAccuracyRecord[]; activeSignal: SignalPlan | null }) {
@@ -2294,7 +2339,7 @@ function CommitmentAccuracyPanel({ records, activeSignal }: { records: Commitmen
   return (
     <Panel title="Commitment accuracy">
       <div className="grid gap-3 sm:grid-cols-3">
-        <Metric label="Last 10" value={last.length ? `${correct}/${resolved.length}` : '—'} detail="Resolved commitments" help="This grades Edge15's locked 8:00-left test prediction, not later live recommendations." tone={accuracy === null ? 'neutral' : accuracy >= 60 ? 'good' : accuracy >= 50 ? 'warn' : 'bad'} />
+        <Metric label="Last 10" value={last.length ? `${correct}/${resolved.length}` : '—'} detail="Resolved commitments" help="This grades Edge15's locked 6:00 commitment prediction, not later live recommendations." tone={accuracy === null ? 'neutral' : accuracy >= 60 ? 'good' : accuracy >= 50 ? 'warn' : 'bad'} />
         <Metric label="Accuracy" value={accuracy === null ? '—' : `${accuracy}%`} detail="Won / resolved" help="No Trade and unresolved windows are not counted as wins or losses." tone={accuracy === null ? 'neutral' : accuracy >= 60 ? 'good' : accuracy >= 50 ? 'warn' : 'bad'} />
         <Metric label="Current lock" value={activeSignal?.commitmentStatus === 'COMMITTED' ? activeSignal.committedDirection : activeSignal?.commitmentStatus === 'NO TRADE' ? 'NO TRADE' : 'SCOUT'} detail="This contract" help="Edge15 records this automatically when the contract rolls into the next 15-minute window. SCOUT means no lock has formed yet." tone={activeSignal?.commitmentStatus === 'COMMITTED' ? 'blue' : 'neutral'} />
       </div>
@@ -2436,6 +2481,125 @@ function CommitmentStatusCard({ signal, countdown }: { signal: SignalPlan; count
       <div className="mt-1 opacity-90">{highlightText(signal.commitmentReason)}</div>
     </div>
   );
+}
+
+
+function PreCommitPreviewCard({ preview }: { preview: PreCommitPreview }) {
+  const toneClass = preview.tone === 'good'
+    ? 'border-edge-green/40 bg-edge-green/10 text-edge-green'
+    : preview.tone === 'bad'
+      ? 'border-edge-red/40 bg-edge-red/10 text-edge-red'
+      : preview.tone === 'warn'
+        ? 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber'
+        : 'border-edge-blue/40 bg-edge-blue/10 text-edge-blue';
+  return (
+    <div className={`mt-3 rounded-2xl border p-3 ${toneClass}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-[11px] font-black uppercase tracking-[0.18em] opacity-80">Pre-Commit Preview</div>
+          <div className="mt-1 text-2xl font-black leading-tight">{highlightText(preview.projectedPick)}</div>
+        </div>
+        <div className="text-right text-xs leading-5">
+          <div><span className="font-black">Lock:</span> {preview.timeUntilLock}</div>
+          <div><span className="font-black">Would lock now:</span> {preview.wouldLockNow}</div>
+          <div><span className="font-black">Strength:</span> {preview.strength}/100</div>
+        </div>
+      </div>
+      <div className="mt-2 text-xs leading-5 text-slate-200">{highlightText(preview.message)}</div>
+      <div className="mt-2 grid gap-1 text-[11px] leading-4 text-slate-300 sm:grid-cols-2">
+        {preview.changes.slice(0, 4).map((change) => <div key={change} className="rounded-lg border border-edge-line bg-black/20 px-2 py-1">{highlightText(change)}</div>)}
+      </div>
+    </div>
+  );
+}
+
+
+function PositionExitPanel({ read }: { read: PositionExitRead }) {
+  return (
+    <div className={`mt-4 rounded-3xl border p-4 ${read.tone === 'good' ? 'border-edge-green/30 bg-edge-green/10' : read.tone === 'warn' ? 'border-edge-amber/30 bg-edge-amber/10' : read.tone === 'bad' ? 'border-edge-red/30 bg-edge-red/10' : 'border-edge-blue/30 bg-edge-blue/10'}`}>
+      <div className="mb-3 text-xs uppercase tracking-[0.22em] text-edge-muted">Position Exit Engine</div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Metric label="Exit status" value={read.status} detail={read.status === 'CASH OUT SIGNAL' ? 'Thesis breaking' : 'Position management'} help="CASH OUT SIGNAL is intentionally hard to trigger. It requires multiple signs that the original position thesis is failing." tone={read.tone} />
+        <Metric label="Hold Quality" value={read.holdQuality} detail={`${read.score}/100`} help="Rates whether the locked position still has support from the live model, strike location, momentum, settlement risk, and value." tone={read.tone} />
+        <Metric label="Profit Protection" value={read.profitProtection} detail="If available" help="A warning to protect gains or avoid giving back value when the position is still alive but weakening." tone={read.profitProtection === 'ACTIVE' ? 'warn' : 'neutral'} />
+        <Metric label="Salvage" value={read.salvageWarning} detail="Avoid full-loss risk" help="A salvage warning means the trade is weakening enough that exiting early may be better than hoping for a full reversal." tone={read.salvageWarning === 'ACTIVE' ? 'bad' : 'neutral'} />
+      </div>
+      <div className="mt-3 grid gap-2 text-xs leading-5 text-slate-200 sm:grid-cols-2">
+        {read.reasons.slice(0, 4).map((reason) => <div key={reason} className="rounded-xl border border-edge-line bg-black/20 px-3 py-2">{highlightText(reason)}</div>)}
+      </div>
+    </div>
+  );
+}
+
+function buildPositionExitRead(position: LockedPosition, assessment: NonNullable<ReturnType<typeof assessPosition>>, decision: Decision, countdown: Countdown, tradeQuality: TradeQuality, entryValue: EntryValue, flipRisk: FlipRisk): PositionExitRead {
+  const reasons: string[] = [];
+  let penalty = 0;
+  const oppositeSignal = decision.direction !== 'NONE' && decision.direction !== position.side;
+  const wrongSideOfStrike = position.side === 'OVER'
+    ? decision.distanceToReference !== null && decision.distanceToReference < 0
+    : position.side === 'UNDER'
+      ? decision.distanceToReference !== null && decision.distanceToReference > 0
+      : false;
+  const movedAgainstEntry = assessment.distanceSinceEntry !== null
+    ? (position.side === 'OVER' ? assessment.distanceSinceEntry < -20 : assessment.distanceSinceEntry > 20)
+    : false;
+  const favorableFromEntry = assessment.distanceSinceEntry !== null
+    ? (position.side === 'OVER' ? assessment.distanceSinceEntry > 25 : assessment.distanceSinceEntry < -25)
+    : false;
+
+  if (oppositeSignal && decision.confidence >= 72) {
+    penalty += 30;
+    reasons.push(`Live model now favors ${decision.direction} against your ${position.side}.`);
+  } else if (oppositeSignal) {
+    penalty += 16;
+    reasons.push(`Live model is leaning against your ${position.side}, but not strongly enough for a forced exit signal.`);
+  }
+  if (wrongSideOfStrike) {
+    penalty += 24;
+    reasons.push(`${position.side} is now on the wrong side of the reference strike.`);
+  }
+  if (movedAgainstEntry) {
+    penalty += 13;
+    reasons.push('BTC has moved against your entry since the position was locked.');
+  }
+  if (decision.settlement.risk === 'Extreme') {
+    penalty += 25;
+    reasons.push('Settlement risk is Extreme.');
+  } else if (decision.settlement.risk === 'High') {
+    penalty += 17;
+    reasons.push('Settlement risk is High.');
+  }
+  if (flipRisk.level === 'High') {
+    penalty += 17;
+    reasons.push('Late flip risk is High.');
+  } else if (flipRisk.level === 'Medium') {
+    penalty += 7;
+    reasons.push('Flip risk is Medium.');
+  }
+  if (tradeQuality.label === 'AVOID') {
+    penalty += 18;
+    reasons.push('Trade Quality has collapsed to AVOID.');
+  } else if (tradeQuality.label === 'WEAK') {
+    penalty += 9;
+    reasons.push('Trade Quality has weakened.');
+  }
+  if (entryValue.label === 'BAD') {
+    penalty += 10;
+    reasons.push('Entry Value is now BAD, so payout/value no longer supports chasing.');
+  }
+  if (countdown.remainingMs <= 180000 && wrongSideOfStrike) {
+    penalty += 18;
+    reasons.push('Final 3 minutes and position is on the wrong side of strike.');
+  }
+  if (!reasons.length) reasons.push('No major thesis-break signal yet. Continue monitoring normally.');
+
+  const score = Math.max(0, Math.min(100, 100 - penalty));
+  const holdQuality: PositionExitRead['holdQuality'] = score >= 78 ? 'STRONG' : score >= 58 ? 'OK' : score >= 34 ? 'WEAK' : 'BROKEN';
+  const status: PositionExitRead['status'] = penalty >= 78 ? 'CASH OUT SIGNAL' : penalty >= 56 ? 'DANGER' : penalty >= 30 ? 'WATCH CLOSELY' : 'HOLD';
+  const tone: Tone = status === 'HOLD' ? 'good' : status === 'WATCH CLOSELY' ? 'warn' : 'bad';
+  const profitProtection = favorableFromEntry && (oppositeSignal || tradeQuality.label === 'WEAK' || flipRisk.level === 'High') ? 'ACTIVE' : 'QUIET';
+  const salvageWarning = (status === 'DANGER' || status === 'CASH OUT SIGNAL') && (wrongSideOfStrike || movedAgainstEntry || oppositeSignal) ? 'ACTIVE' : 'QUIET';
+  return { status, holdQuality, score, profitProtection, salvageWarning, reasons, tone };
 }
 
 function EngineCard({ engine, average }: { engine: EngineVote; average?: EngineAverage }) {
@@ -2585,11 +2749,12 @@ function buildValueGate(direction: SignalDirection, countdown: Countdown, snapsh
   const askCents = direction === 'OVER' ? snapshot.kalshi?.yesAsk ?? null : snapshot.kalshi?.noAsk ?? null;
   const late = countdown.remainingMs <= 240000;
   if (askCents === null) {
+    const finalThree = countdown.remainingMs <= 180000;
     return {
       label: 'Payout value',
-      passed: !late,
-      detail: late ? 'Odds are unavailable and the window is late. Edge15 blocks fresh entries when payout value cannot be verified.' : 'Odds are unavailable. This gate will become stricter late in the window.',
-      severity: late ? 'block' : 'warn',
+      passed: !finalThree,
+      detail: finalThree ? 'Kalshi ask is unavailable in the final 3 minutes, so Edge15 blocks fresh entries because payout value cannot be verified.' : 'Kalshi ask is unavailable. Edge15 is using model-only value and will not treat this as confirmed payout edge.',
+      severity: finalThree ? 'block' : 'warn',
     };
   }
   const cost = askCents / 100;
@@ -2648,7 +2813,7 @@ function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, co
     {
       label: 'Settlement risk',
       passed: decision.settlement.risk === 'Low',
-      detail: `${decision.settlement.risk}. Clean ENTER needs Low settlement risk in Genesis-024. ${decision.settlement.message}`,
+      detail: `${decision.settlement.risk}. Clean ENTER needs Low settlement risk in Genesis-025. ${decision.settlement.message}`,
       severity: decision.settlement.risk === 'Extreme' || decision.settlement.risk === 'High' ? 'block' : 'warn',
     },
     buildValueGate(direction, countdown, snapshot),
@@ -2680,7 +2845,7 @@ function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, co
 
 function buildLateEntryWarning(decision: Decision, countdown: Countdown) {
   if (countdown.remainingMs > 360000) return null;
-  if (countdown.remainingMs <= 180000) return `Only ${countdown.display} remains. Genesis-024 blocks fresh late entries because the last 3 minutes are too jumpy and the payout is often too small.`;
+  if (countdown.remainingMs <= 180000) return `Only ${countdown.display} remains. Genesis-025 blocks fresh late entries because the last 3 minutes are too jumpy and the payout is often too small.`;
   if (decision.settlement.risk === 'Low' && decision.entryScore >= 82) return null;
   const required = decision.settlement.requiredMove === null ? 'unknown' : `$${decision.settlement.requiredMove.toFixed(0)}`;
   const realistic = decision.settlement.realisticMove === null ? 'unknown' : `$${decision.settlement.realisticMove.toFixed(0)}`;

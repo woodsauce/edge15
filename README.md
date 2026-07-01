@@ -1,34 +1,35 @@
-# Edge15 Genesis-024
+# Edge15 Genesis-025
 
-Edge15 Genesis-024 is the **Adaptive Commit Lab** build.
+Edge15 Genesis-025 is the **6-Minute Commit + Pre-Commit Preview + Position Exit Engine** build.
 
-This version preserves the Genesis-023 live 8:00-left commitment test, but adds a shadow engine that tests a smarter idea: **commit when the setup is ready**, not just when a fixed clock time arrives.
+This version moves the live commitment checkpoint back to **6:00 remaining**, based on the latest Commit Timing Lab results showing 6 minutes as the strongest live timing zone. It keeps the 8:00, 4:00, 3:00, strategy-profile, and adaptive-commit testing labs running in the background.
 
 ## What changed
 
-- Added **Adaptive Commit Lab**.
-- Adaptive shadow mode can commit early, wait into the 8:00–4:00 value zone, confirm near 4:00, or record NO TRADE before the final no-chase zone.
-- Adaptive decisions are tracked separately from live trading logic.
-- Adaptive records are included in backup/export/restore and pending-result rechecks.
-- Tracker Status includes adaptive lab records in stored/pending counts.
-- Existing Genesis-019/020/021/022/023 performance, timing, version, and strategy storage remain compatible.
+- Live commitment returns to about **6:00 remaining**.
+- Added **Pre-Commit Preview** so you can see what Edge15 is leaning toward before the official lock.
+- Added **Position Exit Engine** after you press Entered OVER or Entered UNDER.
+- Added **Hold Quality** and exit statuses: HOLD, WATCH CLOSELY, DANGER, CASH OUT SIGNAL.
+- Long tracking is simplified to **all-time W/L**, no-trades, scored trades, and stored total.
+- Removed the 1h / 4h / 12h / 24h rows from the Performance Tracker.
+- Entry Value now handles missing Kalshi ask data more clearly with **model-only value** instead of pretending payout edge is known.
+- Kalshi-unavailable payout logic no longer blocks early/mid-window reads; it becomes strict in the final 3 minutes.
 
 ## What did not change
 
-- Live trading logic still uses the Genesis-023 8:00-left test behavior.
-- Adaptive Commit Lab is observation-only for now.
-- Trade Quality, Entry Value, final-3-minute protection, payout/value gates, auto-tightening, late-flip protection, Commit Timing Lab, Strategy Profile Lab, Performance Tracker, and backup/export are preserved.
-
-## Why this exists
-
-The fixed timing tests showed that 8:00, 6:00, 4:00, and 3:00 remaining each have different strengths. Genesis-024 starts testing whether Edge15 can do better by waiting for the right combination of confidence, trade quality, entry value, stability, low flip risk, and acceptable payout.
+- Trade Quality guardrails remain active.
+- Entry Value remains observation/support unless ask data is available.
+- Commit Timing Lab continues collecting timing data.
+- Strategy Profile Lab continues collecting profile data.
+- Adaptive Commit Lab remains shadow-only.
+- Backup/export/restore remains compatible with Genesis-019 through Genesis-024 local storage.
 
 ## Deploy
 
-Upload the contents of this folder into the GitHub repo root and commit.
+Upload the **contents** of this folder into the GitHub repo root and commit.
 
 Recommended commit message:
 
 ```text
-Genesis-024: add adaptive commit lab
+Genesis-025: add 6-minute preview and exit engine
 ```
