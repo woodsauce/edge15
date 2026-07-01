@@ -44,6 +44,7 @@ const ENGINE_AVERAGE_STORAGE_KEY = 'edge15.engineAverages.v1';
 const ACTIVE_JOURNAL_ID_STORAGE_KEY = 'edge15.activeJournalEntryId.v1';
 const QUALITY_FILTER_STORAGE_KEY = 'edge15.tradeQualityFilter.v1';
 const COMMITMENT_ACCURACY_STORAGE_KEY = 'edge15.commitmentAccuracy.v3.replay';
+const COMMIT_TIMING_LAB_STORAGE_KEY = 'edge15.commitTimingLab.v1';
 const DEFAULT_VISIBLE_SECTIONS = {
   aiDesk: false,
   indicators: false,
@@ -119,6 +120,49 @@ type PerformanceWindow = {
   winRate: number | null;
 };
 
+type CommitTimingCheckpoint = {
+  id: string;
+  label: string;
+  targetRemainingSeconds: number;
+  targetElapsedMs: number;
+};
+
+type CommitTimingRecord = {
+  id: string;
+  contractKey: string;
+  timingLabel: string;
+  targetRemainingSeconds: number;
+  targetElapsedMs: number;
+  capturedAt: string;
+  committedDirection: 'OVER' | 'UNDER' | 'NONE';
+  decisionAction: Decision['action'];
+  entryScore: number;
+  confidence: number;
+  opportunity: number;
+  stability: number;
+  tradeGrade: string;
+  settlementRisk: Decision['settlement']['risk'];
+  distanceToReference: number | null;
+  payoutAsk: number | null;
+  outcome: 'OVER' | 'UNDER' | 'FLAT' | 'UNKNOWN';
+  correct: boolean | null;
+  open: number | null;
+  close: number | null;
+  resolvedAt: string | null;
+  note: string;
+};
+
+const COMMIT_TIMING_CHECKPOINTS: CommitTimingCheckpoint[] = [
+  { id: '12m', label: '12:00 left', targetRemainingSeconds: 12 * 60, targetElapsedMs: 3 * 60 * 1000 },
+  { id: '10m', label: '10:00 left', targetRemainingSeconds: 10 * 60, targetElapsedMs: 5 * 60 * 1000 },
+  { id: '8m', label: '8:00 left', targetRemainingSeconds: 8 * 60, targetElapsedMs: 7 * 60 * 1000 },
+  { id: '6m', label: '6:00 left', targetRemainingSeconds: 6 * 60, targetElapsedMs: 9 * 60 * 1000 },
+  { id: '4m', label: '4:00 left', targetRemainingSeconds: 4 * 60, targetElapsedMs: 11 * 60 * 1000 },
+  { id: '3m', label: '3:00 left', targetRemainingSeconds: 3 * 60, targetElapsedMs: 12 * 60 * 1000 },
+];
+
+const TIMING_CAPTURE_WINDOW_MS = 45 * 1000;
+
 export function GenesisDashboard() {
   const [snapshot, setSnapshot] = useState<MarketSnapshot>(DEFAULT_SNAPSHOT);
   const [error, setError] = useState<string | null>(null);
@@ -134,6 +178,7 @@ export function GenesisDashboard() {
   const [qualityFilter, setQualityFilter] = useState<QualityFilter>('ANY');
   const [signalHistory, setSignalHistory] = useState<SignalHistoryPoint[]>([]);
   const [commitmentAccuracy, setCommitmentAccuracy] = useState<CommitmentAccuracyRecord[]>([]);
+  const [commitTimingLab, setCommitTimingLab] = useState<CommitTimingRecord[]>([]);
   const [backupStatus, setBackupStatus] = useState<string>('Ready');
   const restoreInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -145,6 +190,15 @@ export function GenesisDashboard() {
         if (Array.isArray(parsed)) setCommitmentAccuracy(parsed.slice(0, 500));
       } catch {
         window.localStorage.removeItem(COMMITMENT_ACCURACY_STORAGE_KEY);
+      }
+    }
+    const savedTimingLab = window.localStorage.getItem(COMMIT_TIMING_LAB_STORAGE_KEY);
+    if (savedTimingLab) {
+      try {
+        const parsed = JSON.parse(savedTimingLab) as CommitTimingRecord[];
+        if (Array.isArray(parsed)) setCommitTimingLab(parsed.slice(0, 1000));
+      } catch {
+        window.localStorage.removeItem(COMMIT_TIMING_LAB_STORAGE_KEY);
       }
     }
   }, []);
@@ -345,7 +399,7 @@ export function GenesisDashboard() {
   function buildPerformanceBackup() {
     return {
       app: 'Edge15',
-      release: 'Genesis-018',
+      release: 'Genesis-019',
       exportedAt: new Date().toISOString(),
       storageKeys: {
         commitmentAccuracy: COMMITMENT_ACCURACY_STORAGE_KEY,
@@ -353,8 +407,10 @@ export function GenesisDashboard() {
         tradeJournal: TRADE_JOURNAL_STORAGE_KEY,
         engineAverages: ENGINE_AVERAGE_STORAGE_KEY,
         qualityFilter: QUALITY_FILTER_STORAGE_KEY,
+        commitTimingLab: COMMIT_TIMING_LAB_STORAGE_KEY,
       },
       commitmentAccuracy,
+      commitTimingLab,
       signalPlan,
       journal,
       engineAverages,
@@ -373,7 +429,7 @@ export function GenesisDashboard() {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
-    setBackupStatus(`Exported ${commitmentAccuracy.length} performance records`);
+    setBackupStatus(`Exported ${commitmentAccuracy.length} performance records and ${commitTimingLab.length} timing tests`);
   }
 
   function backupToClipboard() {
@@ -394,6 +450,11 @@ export function GenesisDashboard() {
       const restoredRecords = Array.isArray(parsed.commitmentAccuracy) ? parsed.commitmentAccuracy.slice(0, 500) as CommitmentAccuracyRecord[] : [];
       setCommitmentAccuracy(restoredRecords);
       window.localStorage.setItem(COMMITMENT_ACCURACY_STORAGE_KEY, JSON.stringify(restoredRecords));
+      const restoredTiming = Array.isArray(parsed.commitTimingLab) ? parsed.commitTimingLab.slice(0, 1000) as CommitTimingRecord[] : [];
+      if (restoredTiming.length) {
+        setCommitTimingLab(restoredTiming);
+        window.localStorage.setItem(COMMIT_TIMING_LAB_STORAGE_KEY, JSON.stringify(restoredTiming));
+      }
       if (parsed.signalPlan) {
         setSignalPlan(parsed.signalPlan as SignalPlan);
         window.localStorage.setItem(SIGNAL_PLAN_STORAGE_KEY, JSON.stringify(parsed.signalPlan));
@@ -432,6 +493,35 @@ export function GenesisDashboard() {
       return next;
     });
   }, [snapshot.fetchedAt, decision.action, decision.confidence, decision.direction, decision.entryScore, signalPlan?.displayAction, signalPlan?.direction, countdown.display]);
+
+
+  useEffect(() => {
+    if (!snapshot.fetchedAt) return;
+    setCommitTimingLab((previous) => {
+      const nextMap = new Map<string, CommitTimingRecord>();
+      for (const record of previous) {
+        const resolved = resolveCommitTimingRecord(record, snapshot.candles);
+        nextMap.set(record.id, resolved);
+      }
+
+      const contractKey = `15m:${countdown.windowStart.toISOString()}`;
+      for (const checkpoint of COMMIT_TIMING_CHECKPOINTS) {
+        const captureKey = `${contractKey}:${checkpoint.id}`;
+        const alreadyCaptured = nextMap.has(captureKey);
+        const elapsed = countdown.elapsedMs;
+        const inCaptureWindow = elapsed >= checkpoint.targetElapsedMs && elapsed <= checkpoint.targetElapsedMs + TIMING_CAPTURE_WINDOW_MS;
+        if (!alreadyCaptured && inCaptureWindow) {
+          nextMap.set(captureKey, createCommitTimingRecord({ checkpoint, contractKey, decision, snapshot, now }));
+        }
+      }
+
+      const next = Array.from(nextMap.values())
+        .sort((a, b) => Date.parse(b.capturedAt) - Date.parse(a.capturedAt))
+        .slice(0, 1000);
+      window.localStorage.setItem(COMMIT_TIMING_LAB_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, [snapshot.fetchedAt, snapshot.candles, countdown.elapsedMs, countdown.windowStart, decision, snapshot, now]);
 
   function lockPosition(side: TradeSide) {
     const locked = createLockedPosition(side, snapshot, decision, countdown);
@@ -487,14 +577,14 @@ export function GenesisDashboard() {
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-018</div>
+          <div className="text-xs font-bold uppercase tracking-[0.38em] text-edge-blue">Genesis-019</div>
           <h1 className="text-3xl font-black tracking-tight">Edge15</h1>
         </div>
         <div className="flex flex-col items-end gap-2">
           <div className={`rounded-full border px-3 py-2 text-xs ${priceFeedLive ? 'border-edge-green/40 bg-edge-green/10 text-edge-green' : 'border-edge-amber/40 bg-edge-amber/10 text-edge-amber'}`}>
             {priceFeedLive ? 'Price feed live' : 'Price feed degraded'}
           </div>
-          <div className="hidden rounded-full border border-edge-line bg-black/20 px-3 py-1 text-[11px] text-edge-muted sm:block">Performance backup • version comparison</div>
+          <div className="hidden rounded-full border border-edge-line bg-black/20 px-3 py-1 text-[11px] text-edge-muted sm:block">Commit timing lab • no logic changes</div>
         </div>
       </header>
 
@@ -540,6 +630,8 @@ export function GenesisDashboard() {
         <CommitmentAccuracyPanel records={commitmentAccuracy} activeSignal={activeSignal} />
         <PerformanceBackupPanel records={commitmentAccuracy} status={backupStatus} onExport={exportPerformanceData} onCopy={backupToClipboard} onRestore={triggerRestore} />
       </section>
+
+      <CommitTimingLabPanel records={commitTimingLab} countdown={countdown} />
       <input ref={restoreInputRef} type="file" accept="application/json" className="hidden" onChange={(event) => restorePerformanceData(event.target.files?.[0] ?? null)} />
 
       <TradeReplayPanel records={commitmentAccuracy} />
@@ -657,12 +749,12 @@ export function GenesisDashboard() {
       ) : null}
 
       {visibleSections.genesisStatus ? (
-        <Panel title="Genesis-018 status">
+        <Panel title="Genesis-019 status">
           <ul className="list-disc space-y-2 pl-5 text-sm text-edge-muted">
             <li>Commitment Accuracy Tracker grades Edge15's locked contract predictions for the last 10 completed windows.</li>
             <li>Market microstructure now uses Coinbase level-2 order book spread, depth, and imbalance as another professional-style data read.</li>
             <li>Genesis-012.1 minute-9 commitment behavior remains intact.</li>
-            <li>Genesis-018 preserves the Genesis-017 trade logic and adds performance backup, restore, and version-comparison support.</li>
+            <li>Genesis-019 preserves the Genesis-017 trade logic and adds performance backup, restore, and version-comparison support.</li>
           </ul>
         </Panel>
       ) : null}
@@ -797,7 +889,7 @@ function PerformanceBackupPanel({
   return (
     <Panel title="Backup + compare">
       <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-        <Metric label="Current version" value="Genesis-018" detail="Logic preserved" help="Genesis-018 does not change the core Genesis-017 trading engine. It protects your results and makes side-by-side testing easier." tone="blue" />
+        <Metric label="Current version" value="Genesis-019" detail="Logic preserved" help="Genesis-019 does not change the core Genesis-017 trading engine. It protects your results and makes side-by-side testing easier." tone="blue" />
         <Metric label="All-time read" value={bestLabel} detail={allTime.winRate === null ? 'No scored records' : `${allTime.winRate}% • ${allTime.wins}-${allTime.losses}`} help="Quick version-comparison label from this browser's stored performance records." tone={bestTone} />
         <Metric label="Last hour" value={recent.winRate === null ? '—' : `${recent.winRate}%`} detail={`W/L ${recent.wins}-${recent.losses}`} help="Useful when comparing multiple Genesis versions side by side over the same test window." tone={recent.winRate === null ? 'neutral' : recent.winRate >= 75 ? 'good' : recent.winRate >= 60 ? 'warn' : 'bad'} />
       </div>
@@ -822,7 +914,7 @@ function TradeQualityPanel({ quality, autoTightening, flipRisk }: { quality: Tra
         <Metric label="Late Flip Risk" value={flipRisk.level} detail={`${flipRisk.flips} recent flips`} help={flipRisk.message} tone={flipRisk.tone} />
       </div>
       <div className="mt-3 rounded-2xl border border-edge-line bg-black/20 p-3 text-xs leading-5 text-edge-muted">
-        Genesis-018 uses this score as the cockpit read: prediction strength is not enough unless value, stability, flip risk, and recent model performance are acceptable.
+        Genesis-019 uses this score as the cockpit read: prediction strength is not enough unless value, stability, flip risk, and recent model performance are acceptable.
       </div>
     </Panel>
   );
@@ -844,7 +936,7 @@ function TradeReplayPanel({ records }: { records: CommitmentAccuracyRecord[] }) 
           </div>
         ))}
       </div>
-      <div className="mt-3 text-xs leading-5 text-edge-muted">Replay records help identify bad setups without manual buttons. Older records may not have every Genesis-018 snapshot field until new commitments are created.</div>
+      <div className="mt-3 text-xs leading-5 text-edge-muted">Replay records help identify bad setups without manual buttons. Older records may not have every Genesis-019 snapshot field until new commitments are created.</div>
     </Panel>
   );
 }
@@ -973,6 +1065,164 @@ function buildTradeQuality(decision: Decision, activeSignal: SignalPlan | null, 
   if (latePenalty >= 8) reasons.push('window is late');
   const message = reasons.length ? `${label}: ${reasons.join(', ')}.` : `${label}: signal, timing, value, and stability are acceptable.`;
   return { label, score, message, tone };
+}
+
+
+function CommitTimingLabPanel({ records, countdown }: { records: CommitTimingRecord[]; countdown: Countdown }) {
+  const rows = buildTimingLabRows(records);
+  const currentKey = `15m:${countdown.windowStart.toISOString()}`;
+  const currentRecords = records.filter((record) => record.contractKey === currentKey);
+  const nextCheckpoint = COMMIT_TIMING_CHECKPOINTS.find((checkpoint) => countdown.elapsedMs < checkpoint.targetElapsedMs);
+  const bestRow = rows
+    .filter((row) => row.resolved >= 5 && row.winRate !== null)
+    .sort((a, b) => (b.winRate ?? 0) - (a.winRate ?? 0) || b.resolved - a.resolved)[0] ?? null;
+
+  return (
+    <Panel title="Commit Timing Lab">
+      <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+        <div>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-sm leading-6 text-slate-200">Shadow-tests decision checkpoints without changing live trading logic.</div>
+              <div className="mt-1 text-xs leading-5 text-edge-muted">This is how we find whether Edge15 should commit earlier for better payout, later for better accuracy, or conditionally based on setup quality.</div>
+            </div>
+            <div className="rounded-full border border-edge-blue/40 bg-edge-blue/10 px-3 py-1 text-xs font-black text-edge-blue">
+              Live logic unchanged
+            </div>
+          </div>
+
+          <div className="mt-4 overflow-hidden rounded-2xl border border-edge-line">
+            <div className="grid grid-cols-[86px_76px_76px_76px_1fr] gap-2 bg-black/30 px-3 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-edge-muted">
+              <div>Timing</div>
+              <div>W/L</div>
+              <div>Rate</div>
+              <div>No trade</div>
+              <div>Read</div>
+            </div>
+            {rows.map((row) => (
+              <div key={row.label} className="grid grid-cols-[86px_76px_76px_76px_1fr] gap-2 border-t border-edge-line px-3 py-2 text-xs">
+                <div className="font-black text-slate-100">{row.label}</div>
+                <div className="text-slate-300">{row.wins}-{row.losses}</div>
+                <div className={row.winRate === null ? 'text-edge-muted' : row.winRate >= 75 ? 'font-black text-edge-green' : row.winRate >= 60 ? 'font-black text-edge-amber' : 'font-black text-edge-red'}>{row.winRate === null ? '—' : `${row.winRate}%`}</div>
+                <div className="text-edge-muted">{row.noTrades}</div>
+                <div className="text-edge-muted">{row.resolved < 5 ? `Need ${5 - row.resolved} more scored` : row.valueRead}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <Metric label="Best Timing So Far" value={bestRow ? bestRow.label : 'Collecting'} detail={bestRow ? `${bestRow.winRate}% over ${bestRow.resolved}` : 'Need 5+ scored per timing'} help="Best timing uses only shadow checkpoints captured while the app was open near that exact time. It does not change the live recommendation yet." tone={bestRow && (bestRow.winRate ?? 0) >= 75 ? 'good' : 'blue'} />
+          <Metric label="Next Checkpoint" value={nextCheckpoint ? nextCheckpoint.label : 'All captured'} detail={nextCheckpoint ? 'Keep app open' : 'Waiting for close'} help="Edge15 only records a timing checkpoint when the app is open within about 45 seconds of that checkpoint. This avoids fake backfilled results." tone="blue" />
+          <div className="rounded-2xl border border-edge-line bg-black/20 p-3">
+            <div className="text-xs uppercase tracking-[0.18em] text-edge-muted">Current window captures</div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {COMMIT_TIMING_CHECKPOINTS.map((checkpoint) => {
+                const captured = currentRecords.find((record) => record.timingLabel === checkpoint.label);
+                return (
+                  <span key={checkpoint.id} className={`rounded-full border px-2 py-1 text-[11px] font-black ${captured ? captured.committedDirection === 'OVER' ? 'border-edge-green/40 bg-edge-green/10 text-edge-green' : captured.committedDirection === 'UNDER' ? 'border-edge-red/40 bg-edge-red/10 text-edge-red' : 'border-edge-line bg-black/20 text-edge-muted' : 'border-edge-line bg-slate-950 text-edge-muted'}`}>
+                    {checkpoint.label}: {captured ? captured.committedDirection : 'waiting'}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-edge-amber/30 bg-edge-amber/10 p-3 text-xs leading-5 text-edge-amber">
+            Early checkpoints may have better payout but lower certainty. Late checkpoints may predict better but often have poor value. This lab tracks both accuracy and trade count before we change commitment timing.
+          </div>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function buildTimingLabRows(records: CommitTimingRecord[]) {
+  return COMMIT_TIMING_CHECKPOINTS.map((checkpoint) => {
+    const group = records.filter((record) => record.timingLabel === checkpoint.label);
+    const scored = group.filter((record) => record.correct !== null);
+    const wins = scored.filter((record) => record.correct === true).length;
+    const losses = scored.filter((record) => record.correct === false).length;
+    const noTrades = group.filter((record) => record.committedDirection === 'NONE').length;
+    const resolved = wins + losses;
+    const winRate = resolved ? Math.round((wins / resolved) * 100) : null;
+    const avgAskSamples = group.filter((record) => record.payoutAsk !== null && record.committedDirection !== 'NONE') as Array<CommitTimingRecord & { payoutAsk: number }>;
+    const avgAsk = avgAskSamples.length ? Math.round(avgAskSamples.reduce((sum, record) => sum + record.payoutAsk, 0) / avgAskSamples.length) : null;
+    const valueRead = avgAsk === null ? `${resolved} scored` : `${resolved} scored • avg ask ${avgAsk}¢`;
+    return { label: checkpoint.label, wins, losses, noTrades, resolved, winRate, valueRead };
+  });
+}
+
+function createCommitTimingRecord({ checkpoint, contractKey, decision, snapshot, now }: { checkpoint: CommitTimingCheckpoint; contractKey: string; decision: Decision; snapshot: MarketSnapshot; now: Date }): CommitTimingRecord {
+  const direction = chooseShadowCommitDirection(decision, snapshot);
+  const ask = direction === 'OVER' ? snapshot.kalshi?.yesAsk ?? null : direction === 'UNDER' ? snapshot.kalshi?.noAsk ?? null : null;
+  const note = direction === 'NONE'
+    ? 'Shadow checkpoint chose NO TRADE because the setup did not clear basic quality gates at this time.'
+    : `Shadow checkpoint chose ${direction} from ${decision.action}, score ${decision.entryScore}, confidence ${decision.confidence}%.`;
+  return {
+    id: `${contractKey}:${checkpoint.id}`,
+    contractKey,
+    timingLabel: checkpoint.label,
+    targetRemainingSeconds: checkpoint.targetRemainingSeconds,
+    targetElapsedMs: checkpoint.targetElapsedMs,
+    capturedAt: now.toISOString(),
+    committedDirection: direction,
+    decisionAction: decision.action,
+    entryScore: decision.entryScore,
+    confidence: decision.confidence,
+    opportunity: decision.opportunity,
+    stability: decision.stability,
+    tradeGrade: decision.tradeGrade,
+    settlementRisk: decision.settlement.risk,
+    distanceToReference: decision.distanceToReference,
+    payoutAsk: ask,
+    outcome: 'UNKNOWN',
+    correct: null,
+    open: null,
+    close: null,
+    resolvedAt: null,
+    note,
+  };
+}
+
+function chooseShadowCommitDirection(decision: Decision, snapshot: MarketSnapshot): 'OVER' | 'UNDER' | 'NONE' {
+  if (decision.direction !== 'OVER' && decision.direction !== 'UNDER') return 'NONE';
+  if (decision.action === 'AVOID') return 'NONE';
+  if (decision.settlement.risk === 'Extreme' || decision.settlement.risk === 'High') return 'NONE';
+  if (decision.confidence < 55 || decision.opportunity < 56 || decision.stability < 52) return 'NONE';
+  if (decision.entryScore > 46 && decision.entryScore < 54) return 'NONE';
+  const wrongSide = decision.direction === 'OVER'
+    ? decision.distanceToReference !== null && decision.distanceToReference < -8
+    : decision.distanceToReference !== null && decision.distanceToReference > 8;
+  if (wrongSide) return 'NONE';
+  const ask = decision.direction === 'OVER' ? snapshot.kalshi?.yesAsk ?? null : snapshot.kalshi?.noAsk ?? null;
+  if (ask !== null && ask >= 94) return 'NONE';
+  return decision.direction;
+}
+
+function resolveCommitTimingRecord(record: CommitTimingRecord, candles: MarketSnapshot['candles']): CommitTimingRecord {
+  if (record.correct !== null || record.committedDirection === 'NONE') {
+    if (record.committedDirection === 'NONE' && record.resolvedAt === null) return { ...record, resolvedAt: new Date().toISOString() };
+    return record;
+  }
+  const startIso = record.contractKey.replace('15m:', '');
+  const startMs = Date.parse(startIso);
+  if (!Number.isFinite(startMs)) return record;
+  const endMs = startMs + 15 * 60 * 1000;
+  if (Date.now() < endMs + 5000) return record;
+  const windowCandles = candles.slice().sort((a, b) => a.time - b.time).filter((c) => c.time >= startMs && c.time < endMs);
+  if (windowCandles.length < 2) return record;
+  const first = windowCandles[0];
+  const last = windowCandles[windowCandles.length - 1];
+  const change = last.close - first.open;
+  const outcome: CommitTimingRecord['outcome'] = Math.abs(change) < 0.01 ? 'FLAT' : change > 0 ? 'OVER' : 'UNDER';
+  return {
+    ...record,
+    outcome,
+    correct: outcome === record.committedDirection,
+    open: first.open,
+    close: last.close,
+    resolvedAt: new Date().toISOString(),
+  };
 }
 
 function PerformanceTrackerPanel({ records }: { records: CommitmentAccuracyRecord[] }) {
@@ -1372,7 +1622,7 @@ function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, co
     {
       label: 'Settlement risk',
       passed: decision.settlement.risk === 'Low',
-      detail: `${decision.settlement.risk}. Clean ENTER needs Low settlement risk in Genesis-018. ${decision.settlement.message}`,
+      detail: `${decision.settlement.risk}. Clean ENTER needs Low settlement risk in Genesis-019. ${decision.settlement.message}`,
       severity: decision.settlement.risk === 'Extreme' || decision.settlement.risk === 'High' ? 'block' : 'warn',
     },
     buildValueGate(direction, countdown, snapshot),
@@ -1404,7 +1654,7 @@ function buildEntryGates(decision: Decision, activeSignal: SignalPlan | null, co
 
 function buildLateEntryWarning(decision: Decision, countdown: Countdown) {
   if (countdown.remainingMs > 360000) return null;
-  if (countdown.remainingMs <= 180000) return `Only ${countdown.display} remains. Genesis-018 blocks fresh late entries because the last 3 minutes are too jumpy and the payout is often too small.`;
+  if (countdown.remainingMs <= 180000) return `Only ${countdown.display} remains. Genesis-019 blocks fresh late entries because the last 3 minutes are too jumpy and the payout is often too small.`;
   if (decision.settlement.risk === 'Low' && decision.entryScore >= 82) return null;
   const required = decision.settlement.requiredMove === null ? 'unknown' : `$${decision.settlement.requiredMove.toFixed(0)}`;
   const realistic = decision.settlement.realisticMove === null ? 'unknown' : `$${decision.settlement.realisticMove.toFixed(0)}`;

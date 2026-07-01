@@ -1,8 +1,8 @@
-# Edge15 Genesis-018
+# Edge15 Genesis-019
 
 AI decision support for 15-minute BTC prediction markets.
 
-## Genesis-018 focus
+## Genesis-019 focus
 
 Trade Quality + Auto-Tightening.
 
@@ -19,10 +19,10 @@ Upload the contents of this folder to the GitHub repo root and commit.
 Suggested commit message:
 
 ```text
-Genesis-018: add trade quality and auto-tightening
+Genesis-019: add trade quality and auto-tightening
 ```
 
 
-## Genesis-018
+## Genesis-019
 
 Performance Backup + Version Comparison release. Core Genesis-017 entry logic is preserved. Adds export, copy, and restore for performance data so results can be saved before cache clears or device/browser changes.
