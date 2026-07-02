@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Edge15 Genesis-024</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">Edge15 Genesis-024</div>
+      <h1>Early Signal Stack</h1>
+      <p>BTC 15-minute Kalshi decision assistant: early read, fair price, max buy, timing, risk, and profile consensus.</p>
+    </div>
+    <div class="controls">
+      <button id="refreshBtn">Refresh now</button>
+      <button id="pauseBtn" class="secondary">Pause</button>
+      <button id="testApiBtn" class="secondary">Test API</button>
+      <button id="copyDiagBtn" class="secondary">Copy diagnostics</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="grid grid-4 cards">
+      <article class="card stat">
+        <span>BTC price</span>
+        <strong id="btcPrice">--</strong>
+        <small id="btcMeta">Coinbase</small>
+      </article>
+      <article class="card stat">
+        <span>Kalshi target</span>
+        <strong id="targetPrice">--</strong>
+        <small id="targetMeta">KXBTC15M</small>
+      </article>
+      <article class="card stat">
+        <span>Time remaining</span>
+        <strong id="timeRemaining">--</strong>
+        <small id="windowLabel">--</small>
+      </article>
+      <article class="card stat">
+        <span>Distance from target</span>
+        <strong id="distanceRead">--</strong>
+        <small id="distanceMeta">--</small>
+      </article>
+    </section>
+
+    <section class="decision card">
+      <div class="decision-head">
+        <div>
+          <div class="eyebrow">Main call</div>
+          <h2 id="finalAction">Loading data...</h2>
+          <p id="finalWhy">Waiting for market, BTC, and regime data.</p>
+        </div>
+        <div class="bigbadge" id="directionBadge">--</div>
+      </div>
+
+      <div class="grid grid-5 metric-strip">
+        <div><span>Confidence</span><strong id="confidenceRead">--</strong></div>
+        <div><span>Risk</span><strong id="riskRead">--</strong></div>
+        <div><span>Fair price</span><strong id="fairPriceRead">--</strong></div>
+        <div><span>Max buy</span><strong id="maxBuyRead">--</strong></div>
+        <div><span>Current ask</span><strong id="currentAskRead">--</strong></div>
+      </div>
+
+      <div class="signal-meter">
+        <div class="bar"><div id="scoreBar"></div></div>
+        <div class="bar-labels"><span>Down pressure</span><span id="scoreRead">Score --</span><span>Up pressure</span></div>
+      </div>
+    </section>
+
+    <section class="grid grid-2">
+      <article class="card">
+        <div class="section-title">
+          <h3>Profiles</h3>
+          <select id="profileSelect">
+            <option value="Balanced">Balanced</option>
+            <option value="Aggressive">Aggressive</option>
+            <option value="Conservative">Conservative</option>
+            <option value="Early Trend">Early Trend</option>
+            <option value="Late Sniper">Late Sniper</option>
+            <option value="No-Trade Guardian">No-Trade Guardian</option>
+          </select>
+        </div>
+        <div id="profilesTable" class="tablelike"></div>
+      </article>
+
+      <article class="card">
+        <div class="section-title">
+          <h3>Early Entry Engine</h3>
+          <span id="entryState" class="pill">--</span>
+        </div>
+        <div id="entryDetails" class="details-list"></div>
+      </article>
+    </section>
+
+    <section class="grid grid-3">
+      <article class="card">
+        <h3>Live Signal Board</h3>
+        <div id="signalBoard" class="details-list"></div>
+      </article>
+      <article class="card">
+        <h3>Market Value</h3>
+        <div id="valueBoard" class="details-list"></div>
+      </article>
+      <article class="card">
+        <h3>Risk / No-Trade Guard</h3>
+        <div id="riskBoard" class="details-list"></div>
+      </article>
+    </section>
+
+    <section class="grid grid-2">
+      <article class="card">
+        <div class="section-title">
+          <h3>Market Data</h3>
+          <span id="marketTicker" class="pill">--</span>
+        </div>
+        <div id="dataSources" class="details-list"></div>
+      </article>
+
+      <article class="card">
+        <div class="section-title">
+          <h3>Manual fallback / overrides</h3>
+          <span class="pill muted">Use only when API target is missing</span>
+        </div>
+        <div class="formgrid">
+          <label>Target price <input id="manualTarget" type="number" placeholder="e.g. 60598.39" step="0.01" /></label>
+          <label>Manual BTC price <input id="manualPrice" type="number" placeholder="optional" step="0.01" /></label>
+          <label>YES ask ¢ <input id="manualYesAsk" type="number" placeholder="optional" step="1" min="1" max="99" /></label>
+          <label>NO ask ¢ <input id="manualNoAsk" type="number" placeholder="optional" step="1" min="1" max="99" /></label>
+        </div>
+      </article>
+    </section>
+
+    <section class="grid grid-2">
+      <article class="card">
+        <div class="section-title">
+          <h3>Result tracker</h3>
+          <div class="controls inline">
+            <button id="logWinBtn" class="success">Log Win</button>
+            <button id="logLossBtn" class="danger">Log Loss</button>
+            <button id="logNoTradeBtn" class="secondary">Log No-Trade</button>
+          </div>
+        </div>
+        <div id="trackerSummary" class="tracker-summary"></div>
+        <div class="controls inline wrap">
+          <button id="exportCsvBtn" class="secondary">Export CSV</button>
+          <button id="exportJsonBtn" class="secondary">Export JSON</button>
+          <button id="clearLogsBtn" class="secondary">Clear logs</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="section-title">
+          <h3>Diagnostics</h3>
+          <span id="lastUpdated" class="pill">--</span>
+        </div>
+        <pre id="diagnostics"></pre>
+      </article>
+    </section>
+  </main>
+
+  <footer>
+    <p>Educational decision assistant only. It does not place trades. Use your own risk controls.</p>
+  </footer>
+
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-import { access } from 'node:fs/promises';
+import { access, mkdir, copyFile } from 'node:fs/promises';
 
 const requiredFiles = [
   'index.html',
@@ -18,4 +18,9 @@ for (const file of requiredFiles) {
   await access(file);
 }
 
-console.log('Edge15 static build check passed. No Next.js build required.');
+await mkdir('public', { recursive: true });
+await copyFile('index.html', 'public/index.html');
+await copyFile('app.js', 'public/app.js');
+await copyFile('styles.css', 'public/styles.css');
+
+console.log('Edge15 static build check passed. Static output prepared in /public.');

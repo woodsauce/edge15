@@ -1,6 +1,6 @@
 {
   "name": "edge15-genesis-024-early-signal-stack",
-  "version": "24.0.2",
+  "version": "24.0.3",
   "private": true,
   "description": "Edge15 Genesis-024 Early Signal Stack for BTC 15-minute Kalshi markets.",
   "type": "module",

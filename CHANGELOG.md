@@ -1,5 +1,11 @@
 # Changelog
 
+## v24.0.3 - Vercel public output fix
+- Added `/public` static output folder with `index.html`, `app.js`, and `styles.css`.
+- Set `vercel.json` `outputDirectory` to `public` so Vercel serves the app homepage instead of a 404.
+- Build script now copies static files into `/public` before deployment.
+- Kept Node 24.x.
+
 ## Genesis-024
 
 - Added Early Signal Stack.
