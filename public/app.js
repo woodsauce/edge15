@@ -4,25 +4,32 @@ const fmtC = n => Number.isFinite(n) ? `${Math.round(n)}¢` : '--';
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 const tanh = Math.tanh;
 
+const STORAGE = {
+  history: 'edge15_history_v25_930',
+  logs: 'edge15_logs_v25_930',
+  snapshots: 'edge15_auto_snapshots_v25_930'
+};
+
 const state = {
   paused: false,
   interval: null,
   latest: null,
   decision: null,
-  history: JSON.parse(localStorage.getItem('edge15_history_v24') || '[]'),
-  logs: JSON.parse(localStorage.getItem('edge15_logs_v24') || '[]'),
+  history: JSON.parse(localStorage.getItem(STORAGE.history) || '[]'),
+  logs: JSON.parse(localStorage.getItem(STORAGE.logs) || '[]'),
+  snapshots: JSON.parse(localStorage.getItem(STORAGE.snapshots) || '[]'),
   diagnostics: [],
   lastCandlesFetch: 0,
   cachedCandles: []
 };
 
 const profiles = {
-  'Balanced': { score: 20, edge: 3, risk: 65, minMin: 2.25, maxMin: 12.5, safety: 4 },
-  'Aggressive': { score: 15, edge: 2, risk: 76, minMin: 1.5, maxMin: 13.5, safety: 3 },
-  'Conservative': { score: 28, edge: 5, risk: 55, minMin: 3, maxMin: 10, safety: 6 },
-  'Early Trend': { score: 18, edge: 2, risk: 70, minMin: 5, maxMin: 12.5, safety: 3.5 },
-  'Late Sniper': { score: 34, edge: 3, risk: 58, minMin: 0.9, maxMin: 4.5, safety: 5 },
-  'No-Trade Guardian': { score: 38, edge: 6, risk: 45, minMin: 3.5, maxMin: 8.5, safety: 8 }
+  '9:30 Predictor': { score: 18, edge: 2.5, risk: 66, safety: 4, label: 'Default test profile' },
+  '9:30 Aggressive': { score: 13, edge: 1.0, risk: 78, safety: 2.5, label: 'More calls, more noise' },
+  '9:30 Conservative': { score: 25, edge: 4.5, risk: 56, safety: 6, label: 'Fewer calls, cleaner' },
+  'Value Hunter': { score: 16, edge: 5.5, risk: 70, safety: 5.5, label: 'Only when price is favorable' },
+  'Paper Test': { score: 8, edge: -99, risk: 99, safety: 0, label: 'Always show model lean' },
+  'No-Trade Guardian': { score: 31, edge: 6, risk: 48, safety: 8, label: 'Rare, strongest-only' }
 };
 
 function getManualNumber(id) {
@@ -41,8 +48,10 @@ function getActiveInputs(data) {
   const yesBid = market?.yesBid ?? orderbook?.bestYesBid ?? null;
   const noBid = market?.noBid ?? orderbook?.bestNoBid ?? null;
   const close = market?.closeTime ? Date.parse(market.closeTime) : null;
+  const open = market?.openTime ? Date.parse(market.openTime) : (close ? close - 15 * 60_000 : null);
   const minutesRemaining = close ? Math.max(0, (close - Date.now()) / 60000) : null;
-  return { market, cb, orderbook, price, target, yesAsk, noAsk, yesBid, noBid, close, minutesRemaining };
+  const marketAge = open ? Math.max(0, (Date.now() - open) / 60000) : null;
+  return { market, cb, orderbook, price, target, yesAsk, noAsk, yesBid, noBid, close, open, minutesRemaining, marketAge };
 }
 
 function addHistory(data) {
@@ -50,6 +59,7 @@ function addHistory(data) {
   if (!Number.isFinite(x.price)) return;
   state.history.push({
     t: Date.now(),
+    marketTicker: x.market?.ticker || null,
     price: x.price,
     target: x.target,
     yesAsk: x.yesAsk,
@@ -57,8 +67,18 @@ function addHistory(data) {
     yesBid: x.yesBid,
     noBid: x.noBid
   });
-  state.history = state.history.filter(p => p.t > Date.now() - 1000 * 60 * 90).slice(-900);
-  localStorage.setItem('edge15_history_v24', JSON.stringify(state.history));
+  state.history = state.history.filter(p => p.t > Date.now() - 1000 * 60 * 120).slice(-1500);
+  localStorage.setItem(STORAGE.history, JSON.stringify(state.history));
+}
+
+function currentMarketHistory(x) {
+  const ticker = x.market?.ticker || null;
+  if (ticker) {
+    const same = state.history.filter(p => p.marketTicker === ticker);
+    if (same.length) return same;
+  }
+  if (x.open) return state.history.filter(p => p.t >= x.open - 60_000);
+  return state.history;
 }
 
 function pointAgo(ms) {
@@ -84,26 +104,80 @@ function oddsDelta(side, ms) {
   return (current.noAsk ?? 0) - (p.noAsk ?? 0);
 }
 
-function lastCandlesScore(candles = [], price) {
-  if (!candles.length || !price) return { score: 0, label: 'No candle data' };
+function lastCandlesScore(candles = []) {
+  if (!candles.length) return { score: 0, label: 'No candle data' };
   const last = candles[candles.length - 1];
   const prev = candles[candles.length - 2] || last;
   const body = (last.close || 0) - (last.open || 0);
   const range = Math.max(1, (last.high || 0) - (last.low || 0));
   const prevBody = (prev.close || 0) - (prev.open || 0);
-  const bodyScore = clamp((body / range) * 8, -8, 8);
+  const wickTop = (last.high || 0) - Math.max(last.open || 0, last.close || 0);
+  const wickBottom = Math.min(last.open || 0, last.close || 0) - (last.low || 0);
+  const bodyScore = clamp((body / range) * 7, -7, 7);
   const follow = Math.sign(body) === Math.sign(prevBody) ? Math.sign(body) * 2 : 0;
-  return { score: bodyScore + follow, label: `${body >= 0 ? 'Green' : 'Red'} 1m candle, body ${body.toFixed(2)}` };
+  const rejection = wickBottom > wickTop * 1.7 ? 2 : wickTop > wickBottom * 1.7 ? -2 : 0;
+  return { score: bodyScore + follow + rejection, label: `${body >= 0 ? 'Green' : 'Red'} 1m candle, body ${body.toFixed(2)}, wick read ${rejection}` };
 }
 
-function timeWindow(minutes) {
-  if (!Number.isFinite(minutes)) return { label: 'Unknown window', grade: 'warn', risk: 10 };
-  if (minutes > 12.5) return { label: 'Very early / forming', grade: 'warn', risk: 8 };
-  if (minutes > 8) return { label: 'Early watch zone', grade: 'info', risk: 2 };
-  if (minutes > 5) return { label: 'Prime early-entry zone', grade: 'good', risk: -4 };
-  if (minutes > 2.25) return { label: 'Late confirmation zone', grade: 'info', risk: 4 };
-  if (minutes > 0.75) return { label: 'Danger late zone', grade: 'warn', risk: 18 };
-  return { label: 'Expiration danger', grade: 'bad', risk: 28 };
+function windowStatus(minutes) {
+  if (!Number.isFinite(minutes)) return { label: 'Unknown window', code: 'unknown', risk: 10, inWindow: false };
+  if (minutes > 10.5) return { label: 'Too early - collecting baseline', code: 'early', risk: 10, inWindow: false };
+  if (minutes > 10) return { label: 'Staging - model opens at 10:00', code: 'staging', risk: 4, inWindow: false };
+  if (minutes >= 9) return { label: 'LIVE 9:00-10:00 prediction window', code: 'live', risk: -8, inWindow: true };
+  if (minutes >= 8.5) return { label: 'Just past test window', code: 'post', risk: 6, inWindow: false };
+  if (minutes >= 5) return { label: 'Too late for this 9:30 model', code: 'late', risk: 13, inWindow: false };
+  if (minutes > 1) return { label: 'Late-market danger', code: 'danger', risk: 22, inWindow: false };
+  return { label: 'Expiration danger', code: 'expire', risk: 32, inWindow: false };
+}
+
+function tradePressure(trades = []) {
+  const cutoff = Date.now() - 90_000;
+  let yesVol = 0;
+  let noVol = 0;
+  let yesPriceSum = 0;
+  let noPriceSum = 0;
+  let count = 0;
+  for (const t of trades || []) {
+    const ts = Date.parse(t.created_time || t.time || 0);
+    if (Number.isFinite(ts) && ts < cutoff) continue;
+    const size = Number(t.count_fp ?? t.count ?? t.size ?? 0);
+    if (!Number.isFinite(size) || size <= 0) continue;
+    const taker = String(t.taker_side || t.taker_outcome_side || '').toLowerCase();
+    const yesPx = Number(t.yes_price_dollars ?? t.yes_price ?? NaN) * (Number(t.yes_price_dollars ?? t.yes_price ?? NaN) <= 1 ? 100 : 1);
+    const noPx = Number(t.no_price_dollars ?? t.no_price ?? NaN) * (Number(t.no_price_dollars ?? t.no_price ?? NaN) <= 1 ? 100 : 1);
+    if (taker.includes('yes')) {
+      yesVol += size;
+      if (Number.isFinite(yesPx)) yesPriceSum += yesPx * size;
+    } else if (taker.includes('no')) {
+      noVol += size;
+      if (Number.isFinite(noPx)) noPriceSum += noPx * size;
+    }
+    count += 1;
+  }
+  const total = yesVol + noVol;
+  const pressure = total ? ((yesVol - noVol) / total) * 100 : 0;
+  return {
+    pressure,
+    yesVol,
+    noVol,
+    count,
+    avgYesPrice: yesVol ? yesPriceSum / yesVol : null,
+    avgNoPrice: noVol ? noPriceSum / noVol : null
+  };
+}
+
+function consistencyScore(history, price) {
+  if (history.length < 5) return { score: 0, label: 'Collecting points' };
+  const recent = history.slice(-10);
+  let up = 0, down = 0;
+  for (let i = 1; i < recent.length; i++) {
+    const d = recent[i].price - recent[i - 1].price;
+    if (d > 0) up += 1;
+    if (d < 0) down += 1;
+  }
+  const total = Math.max(1, up + down);
+  const pressure = ((up - down) / total) * 100;
+  return { score: clamp(pressure / 8, -8, 8), label: `${up} upticks / ${down} downticks` };
 }
 
 function analyze(data) {
@@ -118,39 +192,54 @@ function analyze(data) {
   if (!Number.isFinite(x.price)) warnings.push('BTC price missing. Coinbase endpoint or manual price needed.');
   if (!Number.isFinite(x.target)) warnings.push('Kalshi target missing. Add manual target until API exposes it.');
 
+  const selectedProfile = $('profileSelect').value || '9:30 Predictor';
+  const profile = profiles[selectedProfile] || profiles['9:30 Predictor'];
   const price = x.price || 0;
   const target = x.target || null;
   const distance = target ? price - target : 0;
   const distPct = target ? (distance / price) * 100 : 0;
+  const hist = currentMarketHistory(x);
+  const baseline = hist[0] || null;
+  const openDelta = baseline?.price ? price - baseline.price : 0;
+
   const d15 = delta(price, 15_000);
   const d30 = delta(price, 30_000);
   const d60 = delta(price, 60_000);
   const d180 = delta(price, 180_000);
+  const d300 = delta(price, 300_000);
 
-  const norm = price * 0.00035 || 25;
+  const norm = price * 0.00032 || 20;
   const momentumScore =
-    tanh(d15 / norm) * 7 +
-    tanh(d30 / norm) * 8 +
-    tanh(d60 / (norm * 1.3)) * 9 +
-    tanh(d180 / (norm * 2.1)) * 7;
-  const distanceScore = target ? tanh(distance / (price * 0.0011)) * 23 : 0;
-  const candle = lastCandlesScore(data?.coinbase?.candles || [], price);
-  const cbBookScore = clamp((data?.coinbase?.book?.imbalance || 0) / 6, -9, 9);
-  const kalshiPressureScore = clamp((x.orderbook?.pressure || 0) / 7, -12, 12);
-  const oddsMoveScore = clamp((oddsDelta('YES', 60_000) - oddsDelta('NO', 60_000)) * 1.2, -10, 10);
-  const futuresScore = clamp((data?.binance?.priceChangePercent24h || 0) / 2.5, -5, 5);
+    tanh(d30 / norm) * 7 +
+    tanh(d60 / (norm * 1.2)) * 10 +
+    tanh(d180 / (norm * 2.0)) * 9 +
+    tanh(d300 / (norm * 3.0)) * 5;
+  const distanceScore = target ? tanh(distance / (price * 0.00075)) * 24 : 0;
+  const openMoveScore = baseline ? tanh(openDelta / (price * 0.0010)) * 17 : 0;
+  const candle = lastCandlesScore(data?.coinbase?.candles || []);
+  const cbBookScore = clamp((data?.coinbase?.book?.imbalance || 0) / 5, -10, 10);
+  const book = x.orderbook || {};
+  const bookDepthScore = clamp((book.pressure || 0) / 4, -10, 10);
+  const yesMid = Number.isFinite(x.yesBid) && Number.isFinite(x.yesAsk) ? (x.yesBid + x.yesAsk) / 2 : null;
+  const marketOddsScore = Number.isFinite(yesMid) ? clamp((yesMid - 50) * 0.42, -12, 12) : 0;
+  const tPressure = tradePressure(data?.kalshi?.trades || []);
+  const tradeScore = clamp(tPressure.pressure / 6, -12, 12);
+  const oddsMoveScore = clamp((oddsDelta('YES', 60_000) - oddsDelta('NO', 60_000)) * 1.5, -10, 10);
+  const consistency = consistencyScore(hist, price);
+  const futuresScore = clamp((data?.binance?.priceChangePercent24h || 0) / 3.2, -4, 4);
 
-  const rawScore = momentumScore + distanceScore + candle.score + cbBookScore + kalshiPressureScore + oddsMoveScore + futuresScore;
-  const score = clamp(rawScore, -48, 48);
-  const upProb = clamp(50 + score, 4, 96);
+  const rawScore = momentumScore + distanceScore + openMoveScore + candle.score + cbBookScore + bookDepthScore + marketOddsScore + tradeScore + oddsMoveScore + consistency.score + futuresScore;
+  const score = clamp(rawScore, -60, 60);
+  const upProb = clamp(50 + score * 0.72, 5, 95);
   const downProb = 100 - upProb;
   const direction = upProb >= downProb ? 'YES' : 'NO';
   const directionLabel = direction === 'YES' ? 'UP / YES' : 'DOWN / NO';
   const confidence = direction === 'YES' ? upProb : downProb;
+  const predictionStrength = Math.abs(score);
+  const strengthLabel = predictionStrength >= 34 ? 'Strong' : predictionStrength >= 22 ? 'Medium' : predictionStrength >= 12 ? 'Light' : 'Weak';
   const currentAsk = direction === 'YES' ? x.yesAsk : x.noAsk;
-  const fairPrice = confidence * 0.99;
-  const selectedProfile = $('profileSelect').value || 'Balanced';
-  const safety = profiles[selectedProfile]?.safety ?? 4;
+  const fairPrice = confidence * 0.985;
+  const safety = profile.safety ?? 4;
   const maxBuy = fairPrice - safety;
   const edge = Number.isFinite(currentAsk) ? fairPrice - currentAsk : null;
 
@@ -159,28 +248,47 @@ function analyze(data) {
   const activeSpread = direction === 'YES' ? spreadYes : spreadNo;
   const volIndex = data?.deribit?.volatilityIndex ?? null;
   const funding = data?.binance?.latestFundingRate ?? null;
+  const window = windowStatus(x.minutesRemaining);
 
-  const whipsaw = Math.sign(d15) && Math.sign(d60) && Math.sign(d15) !== Math.sign(d60);
-  const closeToTarget = target ? Math.abs(distPct) < 0.035 : true;
-  let risk = 34;
-  risk += timeWindow(x.minutesRemaining).risk;
-  risk += Math.abs(score) < 14 ? 18 : Math.abs(score) < 22 ? 8 : -4;
-  risk += closeToTarget ? 18 : 0;
-  risk += whipsaw ? 14 : 0;
-  risk += Number.isFinite(activeSpread) && activeSpread > 8 ? 12 : 0;
-  risk += Number.isFinite(volIndex) && volIndex > 65 ? 8 : 0;
-  risk += Number.isFinite(funding) && Math.abs(funding) > 0.00018 ? 5 : 0;
-  risk += edge !== null && edge < 0 ? 10 : 0;
+  const whipsaw = Math.sign(d30) && Math.sign(d180) && Math.sign(d30) !== Math.sign(d180);
+  const closeToTarget = target ? Math.abs(distPct) < 0.025 : true;
+  const kalshiConflict = direction === 'YES' ? tPressure.pressure < -18 : tPressure.pressure > 18;
+  const coinbaseConflict = direction === 'YES' ? cbBookScore < -3 : cbBookScore > 3;
+  const candleConflict = direction === 'YES' ? candle.score < -2 : candle.score > 2;
+
+  let alignment = 0;
+  const sign = direction === 'YES' ? 1 : -1;
+  [momentumScore, distanceScore, openMoveScore, candle.score, cbBookScore, bookDepthScore, marketOddsScore, tradeScore, oddsMoveScore, consistency.score].forEach(v => {
+    if (Math.sign(v) === sign && Math.abs(v) > 1.5) alignment += 1;
+  });
+
+  let risk = 32;
+  risk += window.risk;
+  risk += predictionStrength < 12 ? 24 : predictionStrength < 22 ? 12 : predictionStrength < 32 ? 4 : -4;
+  risk += closeToTarget ? 14 : 0;
+  risk += whipsaw ? 15 : 0;
+  risk += Number.isFinite(activeSpread) && activeSpread > 6 ? 8 : 0;
+  risk += Number.isFinite(activeSpread) && activeSpread > 10 ? 8 : 0;
+  risk += Number.isFinite(volIndex) && volIndex > 70 ? 8 : 0;
+  risk += Number.isFinite(funding) && Math.abs(funding) > 0.00018 ? 4 : 0;
+  risk += kalshiConflict ? 10 : 0;
+  risk += coinbaseConflict ? 5 : 0;
+  risk += candleConflict ? 5 : 0;
+  risk += edge !== null && edge < -3 ? 10 : 0;
+  risk -= alignment >= 6 ? 8 : alignment >= 4 ? 4 : 0;
   risk = clamp(Math.round(risk), 1, 99);
 
-  signalRows.push(['BTC micro momentum', `${d15 >= 0 ? '+' : ''}${d15.toFixed(2)} / 15s, ${d60 >= 0 ? '+' : ''}${d60.toFixed(2)} / 60s`]);
-  signalRows.push(['Distance signal', target ? `${distance >= 0 ? 'Above' : 'Below'} target by ${fmtUsd(Math.abs(distance))}` : 'Missing target']);
+  signalRows.push(['9:30 composite score', `${score >= 0 ? '+' : ''}${score.toFixed(1)} (${strengthLabel})`]);
+  signalRows.push(['BTC from market baseline', baseline ? `${openDelta >= 0 ? '+' : ''}${openDelta.toFixed(2)} since first tracked print` : 'Collecting baseline']);
+  signalRows.push(['BTC micro momentum', `${d30 >= 0 ? '+' : ''}${d30.toFixed(2)} / 30s, ${d180 >= 0 ? '+' : ''}${d180.toFixed(2)} / 3m`]);
+  signalRows.push(['Distance to Kalshi target', target ? `${distance >= 0 ? 'Above' : 'Below'} by ${fmtUsd(Math.abs(distance))}` : 'Missing target']);
   signalRows.push(['Coinbase orderbook', `${(data?.coinbase?.book?.imbalance ?? 0).toFixed(1)}% imbalance`]);
-  signalRows.push(['Kalshi pressure', `${(x.orderbook?.pressure ?? 0).toFixed(1)}% YES-vs-NO depth`]);
-  signalRows.push(['Kalshi odds movement', `${oddsMoveScore >= 0 ? 'YES' : 'NO'} ${Math.abs(oddsMoveScore).toFixed(1)} score`]);
+  signalRows.push(['Kalshi top-book/odds', Number.isFinite(yesMid) ? `YES mid ${yesMid.toFixed(1)}¢, score ${marketOddsScore.toFixed(1)}` : 'Missing YES mid']);
+  signalRows.push(['Kalshi recent trades', `${tPressure.pressure >= 0 ? 'YES' : 'NO'} pressure ${Math.abs(tPressure.pressure).toFixed(1)}%, ${Math.round(tPressure.yesVol)}Y / ${Math.round(tPressure.noVol)}N`]);
+  signalRows.push(['Tape consistency', consistency.label]);
   signalRows.push(['1m candle read', candle.label]);
 
-  valueRows.push(['Selected side', directionLabel]);
+  valueRows.push(['Prediction', directionLabel]);
   valueRows.push(['Estimated chance', `${confidence.toFixed(1)}%`]);
   valueRows.push(['Fair price', fmtC(fairPrice)]);
   valueRows.push(['Safety discount', `${safety.toFixed(1)}¢`]);
@@ -188,82 +296,103 @@ function analyze(data) {
   valueRows.push(['Current ask', Number.isFinite(currentAsk) ? fmtC(currentAsk) : 'Missing']);
   valueRows.push(['Edge', edge !== null ? `${edge >= 0 ? '+' : ''}${edge.toFixed(1)}¢` : 'Missing ask']);
 
-  riskRows.push(['Window', timeWindow(x.minutesRemaining).label]);
-  riskRows.push(['Close to target', closeToTarget ? 'Yes - dangerous' : 'No']);
+  riskRows.push(['9:30 window', window.label]);
+  riskRows.push(['Market age', Number.isFinite(x.marketAge) ? `${x.marketAge.toFixed(1)} minutes` : 'Unknown']);
+  riskRows.push(['Close to target', closeToTarget ? 'Yes - flip risk' : 'No']);
   riskRows.push(['Whipsaw check', whipsaw ? 'Warning' : 'Clean enough']);
   riskRows.push(['Spread', Number.isFinite(activeSpread) ? `${activeSpread.toFixed(1)}¢` : 'Missing']);
-  riskRows.push(['Futures funding', Number.isFinite(funding) ? funding.toFixed(6) : 'Unavailable']);
+  riskRows.push(['Signal alignment', `${alignment}/10 major inputs agree`]);
   riskRows.push(['DVOL regime', Number.isFinite(volIndex) ? volIndex.toFixed(2) : 'Unavailable']);
 
-  if (target && price) {
-    reasons.push(`${directionLabel} is favored because composite pressure is ${score >= 0 ? 'positive' : 'negative'} and BTC is ${distance >= 0 ? 'above' : 'below'} the target.`);
-  }
-  if (edge !== null && edge > 0) reasons.push(`Value is positive by ${edge.toFixed(1)}¢ versus Edge15 fair price.`);
-  if (edge !== null && edge < 0) warnings.push(`Prediction may be right, but the contract is overpriced by ${Math.abs(edge).toFixed(1)}¢.`);
-  if (closeToTarget) warnings.push('BTC is too close to the target; late flips are more likely.');
-  if (whipsaw) warnings.push('Short-term momentum disagrees with 1-minute momentum; trap risk is elevated.');
+  if (target && price) reasons.push(`${directionLabel} is the 9:30 model prediction because the composite score is ${score >= 0 ? 'positive' : 'negative'} and BTC is ${distance >= 0 ? 'above' : 'below'} the Kalshi target.`);
+  if (baseline) reasons.push(`Since the first tracked print in this market, BTC moved ${openDelta >= 0 ? '+' : ''}${openDelta.toFixed(2)}.`);
+  if (edge !== null && edge > 0) reasons.push(`Value is positive by ${edge.toFixed(1)}¢ versus the model fair price.`);
+  if (edge !== null && edge < 0) warnings.push(`Prediction may be directionally right, but the contract is overpriced by ${Math.abs(edge).toFixed(1)}¢.`);
+  if (closeToTarget) warnings.push('BTC is close to the target; the 9-minute read can flip quickly.');
+  if (whipsaw) warnings.push('Short-term momentum disagrees with 3-minute momentum; trap risk is elevated.');
+  if (!window.inWindow && window.code !== 'staging') warnings.push('This model is designed to be judged only from 10:00 through 9:00 remaining.');
 
   const profileResults = Object.entries(profiles).map(([name, p]) => {
-    const timeOk = Number.isFinite(x.minutesRemaining) ? x.minutesRemaining >= p.minMin && x.minutesRemaining <= p.maxMin : false;
-    const scoreOk = Math.abs(score) >= p.score;
+    const scoreOk = predictionStrength >= p.score;
     const edgeOk = edge !== null && edge >= p.edge;
     const riskOk = risk <= p.risk;
-    const missingOk = Number.isFinite(price) && Number.isFinite(target) && Number.isFinite(currentAsk);
-    const take = missingOk && timeOk && scoreOk && edgeOk && riskOk;
-    let call = take ? `TAKE ${direction}` : 'SKIP';
-    if (!take && missingOk && scoreOk && riskOk && !edgeOk) call = 'WAIT PRICE';
-    if (!take && missingOk && Math.abs(score) >= p.score * .72 && timeOk) call = 'WATCH';
-    return { name, call, take, timeOk, scoreOk, edgeOk, riskOk };
+    const dataOk = Number.isFinite(price) && Number.isFinite(target) && Number.isFinite(currentAsk);
+    const windowOk = window.inWindow;
+    const take = dataOk && windowOk && scoreOk && edgeOk && riskOk && name !== 'Paper Test';
+    let call = 'WAIT WINDOW';
+    if (window.code === 'post' || window.code === 'late' || window.code === 'danger' || window.code === 'expire') call = 'WINDOW PASSED';
+    if (window.inWindow) call = scoreOk ? `PREDICT ${direction}` : 'WEAK / SKIP';
+    if (take) call = `TAKE ${direction}`;
+    if (window.inWindow && scoreOk && riskOk && !edgeOk && name !== 'Paper Test') call = `PREDICT ${direction} / WAIT PRICE`;
+    if (name === 'Paper Test' && window.inWindow) call = `PAPER ${direction}`;
+    return { name, call, take, scoreOk, edgeOk, riskOk, windowOk };
   });
 
   const selectedProfileResult = profileResults.find(p => p.name === selectedProfile) || profileResults[0];
   const guardian = profileResults.find(p => p.name === 'No-Trade Guardian');
-  const consensusTakes = profileResults.filter(p => p.take && p.name !== 'No-Trade Guardian').length;
-  const consensusWatch = profileResults.filter(p => ['TAKE ' + direction, 'WATCH', 'WAIT PRICE'].includes(p.call) && p.name !== 'No-Trade Guardian').length;
+  const consensusPredict = profileResults.filter(p => p.call.includes(direction) && !p.name.includes('Guardian')).length;
+  const consensusTake = profileResults.filter(p => p.take && !p.name.includes('Guardian')).length;
 
-  let finalAction = 'SKIP';
-  let entryState = 'No edge yet';
-  let finalWhy = warnings[0] || 'No clean edge.';
+  let finalAction = 'WAIT FOR 10:00';
+  let entryState = 'Collecting pre-window data';
+  let finalWhy = 'The 9:30 model opens at 10:00 remaining and is judged until 9:00 remaining.';
 
   if (!Number.isFinite(price) || !Number.isFinite(target)) {
     finalAction = 'DATA NEEDED';
-    entryState = 'Waiting for target/price';
+    entryState = 'Waiting for BTC price / Kalshi target';
     finalWhy = 'Add a manual target if Kalshi does not expose it yet.';
-  } else if (guardian?.take) {
-    finalAction = `TAKE ${direction}`;
-    entryState = 'Rare clean guardian-approved entry';
-    finalWhy = reasons.join(' ') || 'Strong signal, low risk, positive value.';
-  } else if (selectedProfileResult.take && consensusTakes >= 2) {
-    finalAction = `TAKE ${direction}`;
-    entryState = 'Entry window open';
-    finalWhy = reasons.join(' ') || 'Selected profile and consensus agree.';
-  } else if (selectedProfileResult.call === 'WAIT PRICE' || (Math.abs(score) >= 20 && edge !== null && edge < (profiles[selectedProfile]?.edge ?? 3))) {
-    finalAction = 'WAIT FOR PRICE';
-    entryState = `Direction ${direction}, price not good enough`;
-    finalWhy = `Direction favors ${directionLabel}, but max buy is ${fmtC(maxBuy)} and current ask is ${fmtC(currentAsk)}.`;
-  } else if (consensusWatch >= 2 || Math.abs(score) >= 12) {
-    finalAction = 'WATCH DEVELOPING';
-    entryState = `${directionLabel} developing`;
-    finalWhy = warnings.length ? warnings.join(' ') : `Early signal is forming, but profile/value agreement is not strong enough yet.`;
+  } else if (window.inWindow) {
+    if (guardian?.take) {
+      finalAction = `TAKE ${direction}`;
+      entryState = 'Guardian-approved 9:30 entry';
+      finalWhy = reasons.join(' ') || 'Strong signal, positive value, and low risk.';
+    } else if (selectedProfileResult.take) {
+      finalAction = `TAKE ${direction}`;
+      entryState = '9:30 entry valid';
+      finalWhy = reasons.join(' ') || 'Selected profile allows the entry.';
+    } else if (predictionStrength >= profile.score && risk <= profile.risk && edge !== null && edge < profile.edge) {
+      finalAction = `PREDICT ${direction} / WAIT PRICE`;
+      entryState = `Prediction valid, price not good enough`;
+      finalWhy = `Model predicts ${directionLabel}, but max buy is ${fmtC(maxBuy)} and current ask is ${fmtC(currentAsk)}.`;
+    } else if (predictionStrength >= Math.max(8, profile.score * 0.6)) {
+      finalAction = `PREDICT ${direction} / PAPER ONLY`;
+      entryState = `${strengthLabel} 9:30 prediction`;
+      finalWhy = warnings.length ? warnings.join(' ') : `Use this as a paper-test prediction; trade filters are not fully satisfied.`;
+    } else {
+      finalAction = 'SKIP / TOO WEAK';
+      entryState = 'No clean 9:30 edge';
+      finalWhy = 'The 9:30 model does not have enough signal strength.';
+    }
+  } else if (window.code === 'staging' || window.code === 'early') {
+    finalAction = `STAGING ${direction}`;
+    entryState = 'Pre-window lean only';
+    finalWhy = `Pre-window lean is ${directionLabel}. Do not judge the model until 10:00-9:00 remaining.`;
+  } else {
+    finalAction = 'WINDOW PASSED';
+    entryState = '9:30 test window closed';
+    finalWhy = `Current lean is ${directionLabel}, but this model should be tested only at 10:00-9:00 remaining.`;
   }
 
-  if (risk >= 76 && finalAction.startsWith('TAKE')) {
-    finalAction = 'SKIP';
+  if (risk >= 82 && finalAction.startsWith('TAKE')) {
+    finalAction = `PREDICT ${direction} / RISK BLOCKED`;
     entryState = 'Blocked by risk guard';
-    finalWhy = 'Signal exists, but risk guard blocked the entry.';
+    finalWhy = 'Signal exists, but the risk guard blocked the live entry.';
   }
 
-  entryRows.push(['Best current side', directionLabel]);
-  entryRows.push(['Entry status', entryState]);
-  entryRows.push(['Best window', 'Target zone: roughly 8:00–5:00 remaining unless signal is unusually clean earlier.']);
-  entryRows.push(['Take rule', `Only take ${direction} at ${fmtC(maxBuy)} or better.`]);
-  entryRows.push(['Consensus', `${consensusTakes} take / ${consensusWatch} watch-or-better profiles`]);
+  entryRows.push(['Test window', 'Only judge predictions made from 10:00 through 9:00 remaining.']);
+  entryRows.push(['Window status', window.label]);
+  entryRows.push(['Model prediction', `${directionLabel} — ${strengthLabel}`]);
+  entryRows.push(['Trade rule', `Only take ${direction} at ${fmtC(maxBuy)} or better, and only inside the 10:00-9:00 window.`]);
+  entryRows.push(['Profile rule', `${selectedProfile}: score ≥ ${profile.score}, edge ≥ ${profile.edge}¢, risk ≤ ${profile.risk}`]);
+  entryRows.push(['Consensus', `${consensusTake} take / ${consensusPredict} predict-or-better profiles`]);
+  entryRows.push(['BRTI caveat', 'Coinbase is only a proxy; Kalshi resolves from CF Benchmarks BRTI average.']);
 
   return {
-    x, score, upProb, downProb, direction, directionLabel, confidence, currentAsk,
-    fairPrice, maxBuy, edge, risk, finalAction, entryState, finalWhy,
+    x, score, rawScore, upProb, downProb, direction, directionLabel, confidence,
+    currentAsk, fairPrice, maxBuy, edge, risk, finalAction, entryState, finalWhy,
     reasons, warnings, signalRows, valueRows, riskRows, entryRows, profileResults,
-    selectedProfile, distance, distPct, d15, d30, d60, d180
+    selectedProfile, distance, distPct, d15, d30, d60, d180, d300, openDelta,
+    window, predictionStrength, strengthLabel, alignment, baseline, tPressure
   };
 }
 
@@ -271,13 +400,43 @@ function row(label, value, cls = '') {
   return `<div class="row"><span>${label}</span><strong class="${cls}">${value}</strong></div>`;
 }
 
+function maybeAutoSnapshot(d) {
+  const ticker = d.x.market?.ticker;
+  if (!ticker || !d.window.inWindow) return;
+  const key = `${ticker}:930`;
+  if (state.snapshots.some(s => s.key === key)) return;
+  const snap = {
+    key,
+    loggedAt: new Date().toISOString(),
+    marketTicker: ticker,
+    target: d.x.target,
+    btcPrice: d.x.price,
+    minutesRemaining: Number(d.x.minutesRemaining?.toFixed?.(2) ?? null),
+    action: d.finalAction,
+    direction: d.direction,
+    confidence: Number(d.confidence.toFixed(2)),
+    risk: d.risk,
+    score: Number(d.score.toFixed(2)),
+    currentAsk: Number.isFinite(d.currentAsk) ? Number(d.currentAsk.toFixed(2)) : null,
+    fairPrice: Number(d.fairPrice.toFixed(2)),
+    maxBuy: Number(d.maxBuy.toFixed(2)),
+    edge: d.edge !== null ? Number(d.edge.toFixed(2)) : null,
+    strength: d.strengthLabel,
+    reason: d.finalWhy
+  };
+  state.snapshots.unshift(snap);
+  state.snapshots = state.snapshots.slice(0, 500);
+  localStorage.setItem(STORAGE.snapshots, JSON.stringify(state.snapshots));
+}
+
 function render() {
   const data = state.latest;
   if (!data) return;
   const d = analyze(data);
   state.decision = d;
+  maybeAutoSnapshot(d);
   const x = d.x;
-  const tw = timeWindow(x.minutesRemaining);
+  const tw = d.window;
 
   $('btcPrice').textContent = fmtUsd(x.price);
   $('btcMeta').textContent = data.btc?.time ? `${data.btc.source || 'BTC source'} ${new Date(data.btc.time).toLocaleTimeString()}` : data.coinbase?.time ? `Coinbase ${new Date(data.coinbase.time).toLocaleTimeString()}` : 'BTC source / fallback';
@@ -298,22 +457,22 @@ function render() {
   $('fairPriceRead').textContent = fmtC(d.fairPrice);
   $('maxBuyRead').textContent = fmtC(d.maxBuy);
   $('currentAskRead').textContent = fmtC(d.currentAsk);
-  $('scoreRead').textContent = `Score ${d.score.toFixed(1)}`;
-  $('scoreBar').style.left = `${clamp(50 + d.score, 2, 98)}%`;
+  $('scoreRead').textContent = `9:30 score ${d.score.toFixed(1)}`;
+  $('scoreBar').style.left = `${clamp(50 + d.score * 0.75, 2, 98)}%`;
   $('entryState').textContent = d.entryState;
-  $('entryState').className = `pill ${d.finalAction.startsWith('TAKE') ? 'good' : d.finalAction.includes('WAIT') || d.finalAction.includes('WATCH') ? 'warn' : 'bad'}`;
+  $('entryState').className = `pill ${d.finalAction.startsWith('TAKE') ? 'good' : d.finalAction.includes('WAIT') || d.finalAction.includes('STAGING') || d.finalAction.includes('PREDICT') ? 'warn' : 'bad'}`;
   $('marketTicker').textContent = x.market?.ticker || 'No open market found';
 
   $('profilesTable').innerHTML = d.profileResults.map(p => {
     const active = p.name === d.selectedProfile ? 'active' : '';
-    const cls = p.take ? 'goodtext' : p.call === 'WATCH' || p.call === 'WAIT PRICE' ? 'warntext' : 'badtext';
+    const cls = p.take ? 'goodtext' : p.call.includes('PREDICT') || p.call.includes('PAPER') ? 'warntext' : 'badtext';
     return `<div class="row ${active}"><div class="profile-name">${p.name}</div><strong class="${cls}">${p.call}</strong></div>`;
   }).join('');
 
   $('entryDetails').innerHTML = d.entryRows.map(([a,b]) => row(a,b)).join('');
   $('signalBoard').innerHTML = d.signalRows.map(([a,b]) => row(a,b)).join('');
   $('valueBoard').innerHTML = d.valueRows.map(([a,b]) => row(a,b, String(b).startsWith('+') ? 'goodtext' : String(b).startsWith('-') ? 'badtext' : '')).join('');
-  $('riskBoard').innerHTML = d.riskRows.map(([a,b]) => row(a,b, String(b).includes('Warning') || String(b).includes('dangerous') ? 'warntext' : '')).join('');
+  $('riskBoard').innerHTML = d.riskRows.map(([a,b]) => row(a,b, String(b).includes('Warning') || String(b).includes('risk') || String(b).includes('late') ? 'warntext' : '')).join('');
 
   const sources = [];
   sources.push(['Kalshi', data.kalshi?.market?.ticker ? 'OK - live market found' : 'Issue']);
@@ -323,8 +482,9 @@ function render() {
   sources.push(['Deribit volatility', data.deribit?.ok ? 'OK' : 'Issue']);
   sources.push(['Kalshi YES/NO ask', `YES ${fmtC(x.yesAsk)} / NO ${fmtC(x.noAsk)}`]);
   sources.push(['Fetch mode', data.fetchMode || 'api-all']);
+  sources.push(['Auto 9:30 snapshots', String(state.snapshots.length)]);
   sources.push(['Kalshi book depth', x.orderbook ? `YES ${Math.round(x.orderbook.yesDepth || 0)} / NO ${Math.round(x.orderbook.noDepth || 0)}` : 'Unavailable']);
-  $('dataSources').innerHTML = sources.map(([a,b]) => row(a,b, b === 'OK' ? 'goodtext' : b === 'Issue' ? 'warntext' : '')).join('');
+  $('dataSources').innerHTML = sources.map(([a,b]) => row(a,b, b === 'OK' || String(b).startsWith('OK') ? 'goodtext' : b === 'Issue' ? 'warntext' : '')).join('');
 
   $('lastUpdated').textContent = `Updated ${new Date().toLocaleTimeString()}`;
   updateDiagnostics();
@@ -333,18 +493,24 @@ function render() {
 
 function updateDiagnostics(extra = null) {
   const payload = {
+    model: 'Genesis-025 9:30 Predictor',
+    testRule: 'Judge predictions only from 10:00 through 9:00 remaining.',
     lastDecision: state.decision ? {
       action: state.decision.finalAction,
       direction: state.decision.directionLabel,
       confidence: state.decision.confidence,
       risk: state.decision.risk,
+      score: state.decision.score,
+      strength: state.decision.strengthLabel,
       fairPrice: state.decision.fairPrice,
       maxBuy: state.decision.maxBuy,
       currentAsk: state.decision.currentAsk,
-      score: state.decision.score,
       profile: state.decision.selectedProfile,
+      minutesRemaining: state.decision.x.minutesRemaining,
+      marketAge: state.decision.x.marketAge,
       reason: state.decision.finalWhy
     } : null,
+    latestAutoSnapshots: state.snapshots.slice(0, 5),
     latestErrors: {
       kalshi: state.latest?.kalshi?.error || state.latest?.kalshi?.diagnostics || null,
       btc: state.latest?.btc?.errors || state.latest?.btc?.error || null,
@@ -404,11 +570,7 @@ function hasUsableLiveData(data) {
 async function refresh() {
   if (state.paused) return;
   try {
-    // Browser-direct endpoint calls are now the primary path. This avoids a Vercel self-fetch issue
-    // where /api/all can return a successful wrapper but stale/missing nested payloads.
     let data = await directDataFetch();
-
-    // Keep /api/all as a diagnostic cross-check only; never allow it to blank out good direct data.
     try {
       const allData = await getJson('/api/all');
       data.allEndpoint = {
@@ -460,7 +622,7 @@ async function runApiTest() {
 }
 
 function summarizeApi(path, json) {
-  if (path.includes('kalshi')) return { market: json.market?.ticker, target: json.market?.target, candidates: json.candidates?.length, diagnostics: json.diagnostics?.slice?.(0, 3) };
+  if (path.includes('kalshi')) return { market: json.market?.ticker, target: json.market?.target, candidates: json.candidates?.length, trades: json.trades?.length, diagnostics: json.diagnostics?.slice?.(0, 3) };
   if (path.includes('btc')) return { price: json.price, source: json.source, bid: json.bid, ask: json.ask };
   if (path.includes('coinbase')) return { price: json.price, candles: json.candles?.length, book: Boolean(json.book) };
   if (path.includes('candles')) return { candles: json.candles?.length };
@@ -475,6 +637,7 @@ function logResult(result) {
   const x = d.x;
   const item = {
     loggedAt: new Date().toISOString(),
+    model: 'Genesis-025 9:30 Predictor',
     result,
     profile: d.selectedProfile,
     action: d.finalAction,
@@ -482,6 +645,7 @@ function logResult(result) {
     confidence: Number(d.confidence.toFixed(2)),
     risk: d.risk,
     score: Number(d.score.toFixed(2)),
+    strength: d.strengthLabel,
     fairPrice: Number(d.fairPrice.toFixed(2)),
     maxBuy: Number(d.maxBuy.toFixed(2)),
     currentAsk: Number.isFinite(d.currentAsk) ? Number(d.currentAsk.toFixed(2)) : null,
@@ -490,12 +654,14 @@ function logResult(result) {
     target: x.target,
     distance: Number(d.distance.toFixed(2)),
     minutesRemaining: Number.isFinite(x.minutesRemaining) ? Number(x.minutesRemaining.toFixed(2)) : null,
+    marketAge: Number.isFinite(x.marketAge) ? Number(x.marketAge.toFixed(2)) : null,
+    in930Window: d.window.inWindow,
     marketTicker: x.market?.ticker || null,
     reason: d.finalWhy
   };
   state.logs.unshift(item);
-  state.logs = state.logs.slice(0, 2000);
-  localStorage.setItem('edge15_logs_v24', JSON.stringify(state.logs));
+  state.logs = state.logs.slice(0, 3000);
+  localStorage.setItem(STORAGE.logs, JSON.stringify(state.logs));
   renderTracker();
 }
 
@@ -507,7 +673,7 @@ function renderTracker() {
   const scored = wins + losses;
   const wr = scored ? (wins / scored) * 100 : 0;
   $('trackerSummary').innerHTML = [
-    ['Wins', wins], ['Losses', losses], ['No-trades', noTrades], ['Win rate', scored ? `${wr.toFixed(1)}%` : '--']
+    ['Wins', wins], ['Losses', losses], ['No-trades', noTrades], ['9:30 snapshots', state.snapshots.length], ['Win rate', scored ? `${wr.toFixed(1)}%` : '--']
   ].map(([a,b]) => `<div><span>${a}</span><strong>${b}</strong></div>`).join('');
 }
 
@@ -522,15 +688,15 @@ function download(name, text, type) {
 }
 
 function exportCsv() {
-  const logs = state.logs;
-  if (!logs.length) return;
-  const keys = Object.keys(logs[0]);
-  const csv = [keys.join(','), ...logs.map(row => keys.map(k => JSON.stringify(row[k] ?? '')).join(','))].join('\n');
-  download(`edge15-results-${new Date().toISOString().slice(0,10)}.csv`, csv, 'text/csv');
+  const rows = [...state.logs];
+  if (!rows.length) return;
+  const keys = Object.keys(rows[0]);
+  const csv = [keys.join(','), ...rows.map(row => keys.map(k => JSON.stringify(row[k] ?? '')).join(','))].join('\n');
+  download(`edge15-930-results-${new Date().toISOString().slice(0,10)}.csv`, csv, 'text/csv');
 }
 
 function exportJson() {
-  download(`edge15-results-${new Date().toISOString().slice(0,10)}.json`, JSON.stringify(state.logs, null, 2), 'application/json');
+  download(`edge15-930-results-${new Date().toISOString().slice(0,10)}.json`, JSON.stringify({ logs: state.logs, snapshots: state.snapshots }, null, 2), 'application/json');
 }
 
 function bind() {
@@ -554,9 +720,11 @@ function bind() {
   $('exportCsvBtn').addEventListener('click', exportCsv);
   $('exportJsonBtn').addEventListener('click', exportJson);
   $('clearLogsBtn').addEventListener('click', () => {
-    if (confirm('Clear Edge15 local result logs?')) {
+    if (confirm('Clear Genesis-025 local result logs and snapshots?')) {
       state.logs = [];
-      localStorage.removeItem('edge15_logs_v24');
+      state.snapshots = [];
+      localStorage.removeItem(STORAGE.logs);
+      localStorage.removeItem(STORAGE.snapshots);
       renderTracker();
     }
   });

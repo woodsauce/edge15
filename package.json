@@ -1,8 +1,8 @@
 {
-  "name": "edge15-genesis-024-early-signal-stack",
-  "version": "24.0.5",
+  "name": "edge15-genesis-025-930-predictor",
+  "version": "25.0.0",
   "private": true,
-  "description": "Edge15 Genesis-024 Early Signal Stack v24.0.5 for BTC 15-minute Kalshi markets.",
+  "description": "Edge15 Genesis-025 9:30 Predictor for BTC 15-minute Kalshi markets.",
   "type": "module",
   "scripts": {
     "start": "vercel dev",

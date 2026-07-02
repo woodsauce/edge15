@@ -1,83 +1,61 @@
-# Edge15 Genesis-024 — Early Signal Stack
+# Edge15 Genesis-025 — 9:30 Predictor
 
-This is a Vercel-ready Edge15 build focused on getting into BTC 15-minute Kalshi trades sooner **only when the edge is real**.
+A Vercel-ready BTC 15-minute Kalshi prediction dashboard focused on one test window: **10:00 through 9:00 remaining**.
 
-## What this version adds
+## What this version is for
 
-- Early Entry Engine
-- Fair Price / Max Buy Price
-- Kalshi orderbook pressure
-- Kalshi odds movement tracking
-- Coinbase BTC price, 1-minute candles, and Level 2 orderbook imbalance. The app uses a light spot/orderbook refresh and refreshes candles separately instead of hammering candle history every 5 seconds.
-- Binance Futures regime data: open interest, funding, mark price, 24h change
-- Deribit BTC volatility regime data
-- Signal Agreement Score across multiple profiles
-- Stronger No-Trade Guard
-- Result tracker with Win/Loss/No-Trade logging
-- CSV/JSON export
-- Diagnostics, Test API, Copy diagnostics
-- Kept the safe Vercel API structure: `/api/kalshi`, `/api/candles`, `/api/coinbase`, `/api/binance`, `/api/deribit`, `/api/health`, `/api/all`
+Genesis-025 is not the normal Edge15 flow. It is a focused paper-test model designed to answer:
 
-## Decision labels
+> At roughly 9 to 10 minutes remaining, what side does the data favor?
 
-- `TAKE YES` / `TAKE NO`: signal, timing, risk, and value line up.
-- `WAIT FOR PRICE`: direction looks right, but the contract is too expensive.
-- `WATCH DEVELOPING`: early signal is forming, but not clean enough yet.
-- `SKIP`: no clean edge.
-- `DATA NEEDED`: missing BTC price or Kalshi target.
+The model still separates direction from trade quality:
 
-## Vercel deployment
+- `TAKE YES/NO` means the 9:30 model likes the direction and the current contract price is acceptable.
+- `PREDICT YES/NO / WAIT PRICE` means the model likes the direction, but the ask is too expensive.
+- `PREDICT YES/NO / PAPER ONLY` means it has a directional read but trade filters are not satisfied.
+- `WAIT FOR 10:00`, `STAGING`, or `WINDOW PASSED` means the current time is outside the intended test zone.
 
-1. Unzip this folder.
-2. Upload the folder contents to your `woodsauce/edge15` GitHub repo, or create a new repo.
-3. In Vercel, import the repo.
-4. Deploy with default settings.
-5. Open the deployed URL.
-6. Click **Test API**.
+## Data used
 
-No build step is required. This is a static frontend with Vercel serverless API routes.
+The model uses:
 
-## Optional Kalshi environment variables
+- Kalshi KXBTC15M market discovery
+- Kalshi target/strike price
+- Kalshi YES/NO bid/ask
+- Kalshi orderbook depth
+- Kalshi recent trades/taker pressure
+- Coinbase BTC spot price
+- Coinbase candles
+- Coinbase orderbook imbalance
+- Binance Futures open interest/funding/regime fields
+- Deribit BTC volatility-index regime
+- Local in-browser market history since the app opened
 
-Public Kalshi market data may work without credentials. If orderbook or market endpoints return `401`, add these Vercel environment variables:
+Important caveat: Kalshi BTC markets settle from CF Benchmarks BRTI average, while Coinbase is only a proxy input.
 
-```text
-KALSHI_KEY_ID=your-api-key-id
-KALSHI_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----
-```
+## How to test
 
-Optional base URL override:
+1. Open the app at the beginning of a new 15-minute BTC market.
+2. Let it run so it can collect baseline/history.
+3. Watch the model from 10:00 through 9:00 remaining.
+4. Log the prediction after settlement using Log Win / Log Loss / Log No-Trade.
+5. Export JSON or CSV after several rounds.
 
-```text
-KALSHI_API_BASE_URL=https://external-api.kalshi.com/trade-api/v2
-```
+## Vercel settings
 
-## How to use live
+- Framework Preset: Other
+- Build Command: `npm run vercel-build`
+- Output Directory: `public`
+- Install Command: `npm install`
+- Node.js Version: `24.x`
 
-1. Open the app before the 15-minute market starts.
-2. Wait for the app to find the current `KXBTC15M` market.
-3. Watch the **Early Entry Engine** panel.
-4. Only consider action when it shows `TAKE YES` or `TAKE NO`.
-5. Use the displayed **Max Buy** price. If the contract is more expensive than Max Buy, wait or skip.
-6. Log the result after the market closes.
+## Main endpoints
 
-## Manual fallback
-
-If Kalshi does not expose the target cleanly, enter the target manually in **Manual fallback / overrides**. You can also manually enter YES/NO ask prices if the orderbook is unavailable.
-
-## Important
-
-This app does not place trades. It is a decision assistant and logger. Short-term prediction markets are risky, and the app can be wrong.
-
-
-## Vercel deploy note
-
-This patch removes the invalid `functions.runtime: nodejs20.x` entry from `vercel.json`. Vercel auto-detects JavaScript files in `/api` as Node.js Functions, and Node is pinned in `package.json` with `engines.node = 20.x`.
-
-
-## v24.0.5 Frontend Live Display Fix
-
-- Browser now calls `/api/kalshi`, `/api/btc`, `/api/coinbase`, `/api/binance`, and `/api/deribit` directly as the primary data path.
-- `/api/all` is retained as a diagnostic cross-check only.
-- Added cache-busting query strings to live fetches.
-- Added fetch-mode visibility in Market Data.
+- `/api/health`
+- `/api/kalshi?series=KXBTC15M`
+- `/api/btc`
+- `/api/coinbase`
+- `/api/candles`
+- `/api/binance`
+- `/api/deribit`
+- `/api/all`

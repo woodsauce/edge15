@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Edge15 Genesis-024</title>
+  <title>Edge15 Genesis-025 9:30 Predictor</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
   <header class="topbar">
     <div>
-      <div class="eyebrow">Edge15 Genesis-024</div>
-      <h1>Early Signal Stack</h1>
-      <p>BTC 15-minute Kalshi decision assistant: early read, fair price, max buy, timing, risk, and profile consensus.</p>
+      <div class="eyebrow">Edge15 Genesis-025</div>
+      <h1>9:30 Predictor</h1>
+      <p>BTC 15-minute Kalshi model focused on making a prediction only in the 10:00–9:00 remaining test window.</p>
     </div>
     <div class="controls">
       <button id="refreshBtn">Refresh now</button>
@@ -48,9 +48,9 @@
     <section class="decision card">
       <div class="decision-head">
         <div>
-          <div class="eyebrow">Main call</div>
+          <div class="eyebrow">9:30 model call</div>
           <h2 id="finalAction">Loading data...</h2>
-          <p id="finalWhy">Waiting for market, BTC, and regime data.</p>
+          <p id="finalWhy">Waiting for market, BTC, Kalshi orderbook/trades, and 9:30 window status.</p>
         </div>
         <div class="bigbadge" id="directionBadge">--</div>
       </div>
@@ -65,20 +65,20 @@
 
       <div class="signal-meter">
         <div class="bar"><div id="scoreBar"></div></div>
-        <div class="bar-labels"><span>Down pressure</span><span id="scoreRead">Score --</span><span>Up pressure</span></div>
+        <div class="bar-labels"><span>NO pressure</span><span id="scoreRead">9:30 score --</span><span>YES pressure</span></div>
       </div>
     </section>
 
     <section class="grid grid-2">
       <article class="card">
         <div class="section-title">
-          <h3>Profiles</h3>
+          <h3>9:30 Test Profiles</h3>
           <select id="profileSelect">
-            <option value="Balanced">Balanced</option>
-            <option value="Aggressive">Aggressive</option>
-            <option value="Conservative">Conservative</option>
-            <option value="Early Trend">Early Trend</option>
-            <option value="Late Sniper">Late Sniper</option>
+            <option value="9:30 Predictor">9:30 Predictor</option>
+            <option value="9:30 Aggressive">9:30 Aggressive</option>
+            <option value="9:30 Conservative">9:30 Conservative</option>
+            <option value="Value Hunter">Value Hunter</option>
+            <option value="Paper Test">Paper Test</option>
             <option value="No-Trade Guardian">No-Trade Guardian</option>
           </select>
         </div>
@@ -87,7 +87,7 @@
 
       <article class="card">
         <div class="section-title">
-          <h3>Early Entry Engine</h3>
+          <h3>9:00–10:00 Remaining Model</h3>
           <span id="entryState" class="pill">--</span>
         </div>
         <div id="entryDetails" class="details-list"></div>
@@ -96,15 +96,15 @@
 
     <section class="grid grid-3">
       <article class="card">
-        <h3>Live Signal Board</h3>
+        <h3>9:30 Signal Board</h3>
         <div id="signalBoard" class="details-list"></div>
       </article>
       <article class="card">
-        <h3>Market Value</h3>
+        <h3>Price / Value Filter</h3>
         <div id="valueBoard" class="details-list"></div>
       </article>
       <article class="card">
-        <h3>Risk / No-Trade Guard</h3>
+        <h3>9:30 Risk Guard</h3>
         <div id="riskBoard" class="details-list"></div>
       </article>
     </section>
@@ -161,7 +161,7 @@
   </main>
 
   <footer>
-    <p>Educational decision assistant only. It does not place trades. Use your own risk controls.</p>
+    <p>Educational decision assistant only. This model is for testing predictions from 10:00 through 9:00 remaining. It does not place trades.</p>
   </footer>
 
   <script src="./app.js"></script>
