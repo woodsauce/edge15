@@ -68,3 +68,8 @@ If Kalshi does not expose the target cleanly, enter the target manually in **Man
 ## Important
 
 This app does not place trades. It is a decision assistant and logger. Short-term prediction markets are risky, and the app can be wrong.
+
+
+## Vercel deploy note
+
+This patch removes the invalid `functions.runtime: nodejs20.x` entry from `vercel.json`. Vercel auto-detects JavaScript files in `/api` as Node.js Functions, and Node is pinned in `package.json` with `engines.node = 20.x`.
