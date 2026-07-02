@@ -1,12 +1,12 @@
 {
   "name": "edge15-genesis-024-early-signal-stack",
-  "version": "24.0.3",
+  "version": "24.0.4",
   "private": true,
   "description": "Edge15 Genesis-024 Early Signal Stack for BTC 15-minute Kalshi markets.",
   "type": "module",
   "scripts": {
     "start": "vercel dev",
-    "check": "node --check api/kalshi.js && node --check api/coinbase.js && node --check api/candles.js && node --check api/binance.js && node --check api/deribit.js && node --check api/health.js && node --check api/all.js",
+    "check": "node --check api/kalshi.js && node --check api/btc.js && node --check api/coinbase.js && node --check api/candles.js && node --check api/binance.js && node --check api/deribit.js && node --check api/health.js && node --check api/all.js",
     "vercel-build": "node scripts/vercel-build.js",
     "build": "node scripts/vercel-build.js"
   },

@@ -1,3 +1,10 @@
+# Edge15 Genesis-024 v24.0.4
+
+- Added `/api/btc` multi-source BTC fallback: Coinbase, Kraken, Gemini, Bitstamp.
+- Improved Kalshi discovery: searches markets and nested events for `KXBTC15M` instead of relying on one route.
+- Added clearer diagnostics when Kalshi or spot-price data is missing.
+- Updated app to use the BTC fallback before Binance/manual fallback.
+
 # Changelog
 
 ## v24.0.3 - Vercel public output fix

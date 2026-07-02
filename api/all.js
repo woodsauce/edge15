@@ -10,11 +10,12 @@ export default async function handler(req, res) {
   if (handleOptions(req, res)) return;
   const entries = await Promise.allSettled([
     call(req, '/api/kalshi?series=KXBTC15M'),
+    call(req, '/api/btc'),
     call(req, '/api/coinbase?light=1'),
     call(req, '/api/binance'),
     call(req, '/api/deribit')
   ]);
-  const names = ['kalshi', 'coinbase', 'binance', 'deribit'];
+  const names = ['kalshi', 'btc', 'coinbase', 'binance', 'deribit'];
   const out = { ok: true, fetchedAt: nowIso() };
   const errors = [];
   entries.forEach((entry, i) => {

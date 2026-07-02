@@ -34,7 +34,7 @@ function getActiveInputs(data) {
   const market = data?.kalshi?.market || null;
   const cb = data?.coinbase || null;
   const orderbook = data?.kalshi?.orderbook || null;
-  const price = getManualNumber('manualPrice') ?? cb?.price ?? data?.binance?.markPrice ?? null;
+  const price = getManualNumber('manualPrice') ?? data?.btc?.price ?? cb?.price ?? data?.binance?.markPrice ?? null;
   const target = getManualNumber('manualTarget') ?? market?.target ?? null;
   const yesAsk = getManualNumber('manualYesAsk') ?? market?.yesAsk ?? orderbook?.impliedYesAsk ?? null;
   const noAsk = getManualNumber('manualNoAsk') ?? market?.noAsk ?? orderbook?.impliedNoAsk ?? null;
@@ -280,7 +280,7 @@ function render() {
   const tw = timeWindow(x.minutesRemaining);
 
   $('btcPrice').textContent = fmtUsd(x.price);
-  $('btcMeta').textContent = data.coinbase?.time ? `Coinbase ${new Date(data.coinbase.time).toLocaleTimeString()}` : 'Coinbase / fallback';
+  $('btcMeta').textContent = data.btc?.time ? `${data.btc.source || 'BTC source'} ${new Date(data.btc.time).toLocaleTimeString()}` : data.coinbase?.time ? `Coinbase ${new Date(data.coinbase.time).toLocaleTimeString()}` : 'BTC source / fallback';
   $('targetPrice').textContent = fmtUsd(x.target);
   $('targetMeta').textContent = x.market?.ticker || 'Manual / waiting';
   $('timeRemaining').textContent = Number.isFinite(x.minutesRemaining) ? `${Math.floor(x.minutesRemaining)}:${String(Math.floor((x.minutesRemaining % 1) * 60)).padStart(2, '0')}` : '--';
@@ -317,6 +317,7 @@ function render() {
 
   const sources = [];
   sources.push(['Kalshi', data.kalshi?.ok ? 'OK' : 'Issue']);
+  sources.push(['BTC spot fallback', data.btc?.ok ? `OK - ${data.btc.source || 'source'}` : 'Issue']);
   sources.push(['Coinbase spot/candles/book', data.coinbase?.ok ? 'OK' : 'Issue']);
   sources.push(['Binance futures regime', data.binance?.ok ? 'OK' : 'Issue']);
   sources.push(['Deribit volatility', data.deribit?.ok ? 'OK' : 'Issue']);
@@ -345,6 +346,7 @@ function updateDiagnostics(extra = null) {
     } : null,
     latestErrors: {
       kalshi: state.latest?.kalshi?.error || state.latest?.kalshi?.diagnostics || null,
+      btc: state.latest?.btc?.errors || state.latest?.btc?.error || null,
       coinbase: state.latest?.coinbase?.errors || state.latest?.coinbase?.error || null,
       binance: state.latest?.binance?.errors || state.latest?.binance?.error || null,
       deribit: state.latest?.deribit?.error || null
@@ -368,8 +370,9 @@ async function refresh() {
     try {
       data = await getJson('/api/all');
     } catch (allErr) {
-      const [kalshi, coinbase, binance, deribit] = await Promise.allSettled([
+      const [kalshi, btc, coinbase, binance, deribit] = await Promise.allSettled([
         getJson('/api/kalshi?series=KXBTC15M'),
+        getJson('/api/btc'),
         getJson('/api/coinbase?light=1'),
         getJson('/api/binance'),
         getJson('/api/deribit')
@@ -378,6 +381,7 @@ async function refresh() {
         ok: true,
         fetchedAt: new Date().toISOString(),
         kalshi: kalshi.status === 'fulfilled' ? kalshi.value : { ok: false, error: String(kalshi.reason) },
+        btc: btc.status === 'fulfilled' ? btc.value : { ok: false, error: String(btc.reason) },
         coinbase: coinbase.status === 'fulfilled' ? coinbase.value : { ok: false, error: String(coinbase.reason) },
         binance: binance.status === 'fulfilled' ? binance.value : { ok: false, error: String(binance.reason) },
         deribit: deribit.status === 'fulfilled' ? deribit.value : { ok: false, error: String(deribit.reason) },
@@ -405,7 +409,7 @@ async function refresh() {
 }
 
 async function runApiTest() {
-  const paths = ['/api/health', '/api/kalshi?series=KXBTC15M', '/api/coinbase', '/api/candles', '/api/binance', '/api/deribit'];
+  const paths = ['/api/health', '/api/kalshi?series=KXBTC15M', '/api/btc', '/api/coinbase', '/api/candles', '/api/binance', '/api/deribit'];
   const results = [];
   for (const path of paths) {
     const start = performance.now();
@@ -420,7 +424,8 @@ async function runApiTest() {
 }
 
 function summarizeApi(path, json) {
-  if (path.includes('kalshi')) return { market: json.market?.ticker, target: json.market?.target, candidates: json.candidates?.length };
+  if (path.includes('kalshi')) return { market: json.market?.ticker, target: json.market?.target, candidates: json.candidates?.length, diagnostics: json.diagnostics?.slice?.(0, 3) };
+  if (path.includes('btc')) return { price: json.price, source: json.source, bid: json.bid, ask: json.ask };
   if (path.includes('coinbase')) return { price: json.price, candles: json.candles?.length, book: Boolean(json.book) };
   if (path.includes('candles')) return { candles: json.candles?.length };
   if (path.includes('binance')) return { openInterest: json.openInterest, funding: json.latestFundingRate };

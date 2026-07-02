@@ -13,6 +13,7 @@ export default async function handler(req, res) {
     },
     endpoints: [
       '/api/kalshi?series=KXBTC15M',
+      '/api/btc',
       '/api/coinbase',
       '/api/candles',
       '/api/binance',

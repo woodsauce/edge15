@@ -5,6 +5,7 @@ const requiredFiles = [
   'app.js',
   'styles.css',
   'api/kalshi.js',
+  'api/btc.js',
   'api/coinbase.js',
   'api/candles.js',
   'api/binance.js',
