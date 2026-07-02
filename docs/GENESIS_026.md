@@ -1,6 +1,6 @@
-# Genesis-026: 4-Minute Commitment Test
+# Genesis-027: 4-Minute Commitment Test
 
-Genesis-026 is a live timing experiment based on the growing Commit Timing Lab evidence.
+Genesis-027 is a live timing experiment based on the growing Commit Timing Lab evidence.
 
 ## Main change
 
