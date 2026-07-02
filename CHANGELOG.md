@@ -1,11 +1,11 @@
 # Changelog
 
-## 27.1.0 - Genesis-027 Rollback Base
+## v28.0.0 — Genesis-028 5:30 Decision Classic
 
-- Rolled interface back to the older predictive-market-helper style.
-- Removed cockpit-style decision panels.
-- Removed forced 9:30 and 4:30 model behavior as the default flow.
-- Restored screenshot/manual input workflow.
-- Restored single Analyze button and simple prediction card.
-- Kept live BTC/Kalshi API support as optional auto-fill and context.
-- Kept Vercel static deployment fixes that worked in previous Genesis builds.
+- Restored Genesis-027-style helper layout as the base.
+- Added primary decision timing around 6:00–5:00 remaining.
+- Added Decision Window and Model Timing fields.
+- Added 5:30 Decision mode as the default.
+- Added timing-aware risk adjustment.
+- Added staging, confirmation, and late-risk behavior.
+- Kept working live-data backend endpoints from the newer builds.

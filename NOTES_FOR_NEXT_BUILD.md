@@ -1,18 +1,11 @@
-# Notes for next build
+# Notes for Next Build
 
-Do not turn this back into a cockpit/predictor-lab layout.
+Track scored results separately by timing bucket:
 
-Preserve the Genesis-027 base style:
+- 8:00+ staging
+- 8:00–6:00 pre-window
+- 6:00–5:00 primary 5:30 decision window
+- 5:00–4:30 confirmation
+- under 4:30 late-risk
 
-- left side: screenshot + manual inputs
-- right side: prediction result
-- one big output
-- simple explanation
-- hidden diagnostics
-
-Future improvements should be small and additive:
-
-1. Improve scoring thresholds using logged wins/losses.
-2. Add a tiny mode comparison row only if it does not clutter the main result.
-3. Keep live Kalshi/BTC auto-fill but always allow manual override.
-4. Add result logging only after the helper feels right again.
+If the 6:00–5:00 window keeps outperforming, make logging/export more prominent and add automatic one-shot snapshot capture at first entry into the primary window.

@@ -22,4 +22,4 @@ await copyFile('index.html', 'public/index.html');
 await copyFile('app.js', 'public/app.js');
 await copyFile('styles.css', 'public/styles.css');
 
-console.log('Edge15 Genesis-027 rollback static build passed.');
+console.log('Edge15 Genesis-028 5:30 Decision Classic static build passed.');

@@ -1,8 +1,8 @@
 {
-  "name": "edge15-genesis-027-rollback-base",
-  "version": "27.1.0",
+  "name": "edge15-genesis-028-530-decision-classic",
+  "version": "28.0.0",
   "private": true,
-  "description": "Edge15 Genesis-027 rollback base: classic two-card BTC predictive market helper with live data support.",
+  "description": "Edge15 Genesis 028 classic helper with 5:30 decision-window logic and working Vercel live data APIs.",
   "type": "module",
   "scripts": {
     "start": "vercel dev",

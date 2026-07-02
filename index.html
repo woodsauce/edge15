@@ -1,78 +1,164 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Edge15 Genesis-027 Rollback Base</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Edge15 Genesis 028 - 5:30 Decision Classic</title>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <link rel="stylesheet" href="./styles.css" />
+  <style>
+    :root {
+      --bg: #0e1117;
+      --card: #171b24;
+      --muted: #9aa4b2;
+      --text: #f4f7fb;
+      --green: #00c853;
+      --red: #ff2d55;
+      --yellow: #ffd166;
+      --border: #2a3140;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #1c2333 0%, var(--bg) 55%);
+      color: var(--text);
+      padding: 18px;
+    }
+    .wrap { max-width: 980px; margin: 0 auto; }
+    h1 { font-size: 1.55rem; margin: 10px 0 6px; }
+    h2 { margin-top: 0; }
+    .sub { color: var(--muted); margin-bottom: 18px; line-height: 1.4; }
+    .grid { display: grid; gap: 14px; grid-template-columns: 1fr; }
+    @media (min-width: 850px) { .grid { grid-template-columns: 1fr 1fr; } }
+    .card {
+      background: rgba(23, 27, 36, .95);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 16px;
+      box-shadow: 0 12px 30px rgba(0,0,0,.25);
+    }
+    label { display: block; color: var(--muted); font-size: .9rem; margin: 12px 0 6px; }
+    input, select, button {
+      width: 100%;
+      padding: 13px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #0f131b;
+      color: var(--text);
+      font-size: 1rem;
+    }
+    button {
+      cursor: pointer;
+      border: 0;
+      font-weight: 800;
+      margin-top: 14px;
+      background: linear-gradient(90deg, #18d26e, #00a6ff);
+      color: #061017;
+    }
+    .secondary {
+      background: #222a38;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .choice {
+      text-align: center;
+      padding: 18px;
+      border-radius: 18px;
+      margin-bottom: 12px;
+      font-size: 2rem;
+      font-weight: 900;
+    }
+    .under { background: rgba(255,45,85,.16); border: 1px solid rgba(255,45,85,.55); color: #ff6b85; }
+    .over { background: rgba(0,200,83,.16); border: 1px solid rgba(0,200,83,.55); color: #48e68d; }
+    .hold { background: rgba(255,209,102,.15); border: 1px solid rgba(255,209,102,.55); color: var(--yellow); }
+    .metric { display: flex; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .metric:last-child { border-bottom: 0; }
+    .metric span:first-child { color: var(--muted); }
+    .bar { height: 14px; background: #0f131b; border-radius: 99px; overflow: hidden; border: 1px solid var(--border); }
+    .fill { height: 100%; width: 50%; background: var(--red); transition: .25s; }
+    img { max-width: 100%; border-radius: 12px; margin-top: 10px; display: none; }
+    .note, .small { color: var(--muted); font-size: .88rem; line-height: 1.45; margin-top: 12px; }
+    .pill { display:inline-block; padding:4px 9px; border:1px solid var(--border); border-radius:999px; color:var(--muted); font-size:.82rem; margin-top:8px; }
+    canvas { width: 100%; height: 220px; background: #0f131b; border:1px solid var(--border); border-radius: 14px; margin-top:10px; }
+    .row { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    #ocrText { white-space: pre-wrap; max-height: 110px; overflow:auto; background:#0f131b; border:1px solid var(--border); border-radius:12px; padding:10px; display:none; }
+    .successBox {
+      margin: 12px 0;
+      padding: 14px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: #0f131b;
+    }
+    .successPct { font-size: 2.2rem; font-weight: 950; margin: 2px 0; }
+    .stars { font-size: 1.45rem; letter-spacing: 2px; margin-top: 4px; }
+    .reasonList { margin: 10px 0 0; padding-left: 0; list-style: none; }
+    .reasonList li { padding: 7px 0; border-bottom: 1px solid var(--border); color: var(--text); }
+    .reasonList li:last-child { border-bottom: 0; }
+    .scale { display:grid; grid-template-columns: repeat(5, 1fr); gap:6px; margin-top:10px; }
+    .scale div { font-size:.72rem; text-align:center; padding:7px 4px; border-radius:10px; background:#0f131b; border:1px solid var(--border); color:var(--muted); }
+    .activeScale { color:var(--text)!important; outline:2px solid rgba(255,255,255,.25); }
+  </style>
 </head>
 <body>
   <div class="wrap">
-    <header>
-      <div class="eyebrow">Edge15 Genesis-027 Rollback Base</div>
-      <h1>15-Min Bitcoin Predictive Market Helper</h1>
-      <p class="sub">Back to the older helper flow: screenshot/manual inputs, one Analyze button, and a simple OVER / UNDER / SKIP result. Live BTC and Kalshi data are support inputs, not the main layout.</p>
-    </header>
+    <h1>Edge15 Genesis 028 - 5:30 Decision Classic</h1>
+    <div class="sub">Genesis 027-style helper restored, now tuned around the scored sweet spot: <b>6:00 to 5:00 remaining</b>, with the strongest decision target around <b>5:30 left</b>. Live BTC/Kalshi fills support the same simple Analyze flow.</div>
 
-    <main class="grid">
-      <section class="card">
+    <div class="grid">
+      <div class="card">
         <h2>Screenshot + Inputs</h2>
 
         <label>Upload screenshot</label>
-        <input id="shot" type="file" accept="image/*" />
-        <button class="secondary" id="readShotBtn">Read screenshot & fill fields</button>
+        <input id="shot" type="file" accept="image/*"/>
+        <button class="secondary" onclick="readScreenshot()">Read screenshot & fill fields</button>
         <div id="ocrStatus" class="small"></div>
-        <pre id="ocrText"></pre>
-        <img id="preview" alt="Screenshot preview" />
-
-        <div class="row twoActions">
-          <button class="secondary" id="liveFillBtn">Use live BTC/Kalshi</button>
-          <button class="secondary" id="refreshLiveBtn">Refresh live data</button>
-        </div>
+        <div id="ocrText"></div>
+        <img id="preview"/>
 
         <label>Current BTC price</label>
-        <input id="current" type="number" step="0.01" placeholder="60743.44" />
+        <input id="current" type="number" step="0.01" placeholder="60234.78"/>
 
         <label>Price to beat</label>
-        <input id="target" type="number" step="0.01" placeholder="60767.06" />
+        <input id="target" type="number" step="0.01" placeholder="60286.52"/>
 
         <label>Time remaining</label>
         <div class="row">
-          <input id="mins" type="number" min="0" step="1" placeholder="8 min" />
-          <input id="secs" type="number" min="0" max="59" step="1" placeholder="47 sec" />
+          <input id="mins" type="number" min="0" step="1" placeholder="8 min"/>
+          <input id="secs" type="number" min="0" max="59" step="1" placeholder="47 sec"/>
         </div>
 
-        <label>Market Over % or YES price ¢</label>
-        <input id="overMarket" type="number" min="0" max="100" step="0.1" placeholder="55" />
+        <label>Market Over %</label>
+        <input id="overMarket" type="number" min="0" max="100" step="1" placeholder="18"/>
 
-        <label>Market Under % or NO price ¢</label>
-        <input id="underMarket" type="number" min="0" max="100" step="0.1" placeholder="46" />
-        <div class="small">Use Kalshi YES/NO ask prices or the screenshot's Over/Under percentages. The model compares its probability to market price.</div>
+        <label>Market Under %</label>
+        <input id="underMarket" type="number" min="0" max="100" step="1" placeholder="83"/>
+        <div class="small">OCR can misread these. Quickly verify Over/Under before betting.</div>
 
         <label>Last visible screenshot movement</label>
         <select id="trend">
           <option value="-2">Strong down / rolling over</option>
           <option value="-1">Slight down</option>
-          <option value="0" selected>Flat / choppy</option>
+          <option value="0">Flat / choppy</option>
           <option value="1">Slight up</option>
           <option value="2">Strong up / breakout</option>
         </select>
 
-        <label>Prediction speed</label>
+        <label>Prediction style</label>
         <select id="mode">
+          <option value="530" selected>5:30 Decision - primary test mode</option>
+          <option value="balanced">Balanced mode</option>
           <option value="early">Early mode - faster pick, more risk</option>
-          <option value="balanced" selected>Balanced mode</option>
+          <option value="turbo">Turbo mode - most aggressive</option>
           <option value="conservative">Conservative mode - waits longer</option>
         </select>
+        <div class="small">5:30 Decision mode is built around your scored results: above 6:00 is staging, 6:00–5:00 is the main decision window, 5:00–4:30 is confirmation, and under 4:30 is late-risk.</div>
 
-        <button id="analyzeBtn">Analyze</button>
-      </section>
+        <button onclick="calculate()">Analyze</button>
+      </div>
 
-      <section class="card">
+      <div class="card">
         <h2>Prediction</h2>
         <div id="choice" class="choice hold">Enter numbers</div>
-
         <div class="successBox">
           <div class="small">Chance of success by recommended pick</div>
           <div id="successPct" class="successPct">—</div>
@@ -85,9 +171,10 @@
             <div id="scale5">Strong<br>80%+</div>
           </div>
         </div>
-
         <div class="bar"><div id="fill" class="fill"></div></div>
 
+        <div class="metric"><span>Decision window</span><b id="windowStatus">—</b></div>
+        <div class="metric"><span>Model timing</span><b id="modelTiming">—</b></div>
         <div class="metric"><span>Estimated Under probability</span><b id="underProb">—</b></div>
         <div class="metric"><span>Estimated Over probability</span><b id="overProb">—</b></div>
         <div class="metric"><span>Gap to target</span><b id="gap">—</b></div>
@@ -106,30 +193,405 @@
         <p id="explain" class="note">This is a decision helper, not a guaranteed signal. Bitcoin can move suddenly near expiration.</p>
         <div id="riskDetails" class="note"></div>
         <div class="note"><b>Why this recommendation?</b><ul id="whyList" class="reasonList"></ul></div>
-        <span class="pill">Best use: update again with 2–3 minutes left</span>
-      </section>
-    </main>
-
-    <section class="card lower">
-      <details>
-        <summary>Live data + diagnostics</summary>
-        <div class="diagGrid">
-          <div>
-            <h3>Live source status</h3>
-            <div id="sourceStatus" class="compactList"></div>
-          </div>
-          <div>
-            <h3>Diagnostics</h3>
-            <button class="secondary compactBtn" id="copyDiagBtn">Copy diagnostics</button>
-            <pre id="diagnostics"></pre>
-          </div>
-        </div>
-      </details>
-    </section>
-
-    <footer id="lastUpdated">Not updated yet</footer>
+        <span class="pill">Best use: run the real decision at 6:00–5:00 left, ideally near 5:30</span>
+      </div>
+    </div>
   </div>
 
-  <script src="./app.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+let selectedImage = null;
+let liveCandles = [];
+let liveMomentum = 0;
+let livePrice = null;
+let liveKalshi = null;
+let autoFilledMarketTicker = null;
+
+$("shot").addEventListener("change", e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  selectedImage = file;
+  const img = $("preview");
+  img.src = URL.createObjectURL(file);
+  img.style.display = "block";
+});
+
+function cleanNum(s) {
+  if (!s) return NaN;
+  return parseFloat(String(s).replace(/[$,\s]/g, "").replace(/[^\d.\-]/g, ""));
+}
+
+function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+function starRating(successChance, risk) {
+  if (successChance >= 84 && risk < 38) return 5;
+  if (successChance >= 76 && risk < 52) return 4;
+  if (successChance >= 66 && risk < 68) return 3;
+  if (successChance >= 56) return 2;
+  if (successChance >= 50) return 1;
+  return 0;
+}
+
+function setScale(successChance) {
+  for (let i = 1; i <= 5; i++) $("scale" + i).classList.remove("activeScale");
+  let id = "scale1";
+  if (successChance >= 80) id = "scale5";
+  else if (successChance >= 70) id = "scale4";
+  else if (successChance >= 60) id = "scale3";
+  else if (successChance >= 50) id = "scale2";
+  $(id).classList.add("activeScale");
+}
+
+function pctIsValid(v) { return Number.isFinite(v) && v >= 0 && v <= 100; }
+
+function decisionWindow(timeMin) {
+  if (timeMin > 8) return { label: "Too early", timing: "Staging only", riskAdj: 14, minTake: 999, minLean: 74, className: "hold" };
+  if (timeMin > 6) return { label: "Pre-window", timing: "Build lean / wait", riskAdj: 6, minTake: 82, minLean: 66, className: "hold" };
+  if (timeMin >= 5) return { label: "PRIME 5:30 ZONE", timing: "Decide now", riskAdj: -8, minTake: 68, minLean: 58, className: "over" };
+  if (timeMin >= 4.5) return { label: "Confirmation", timing: "Still usable", riskAdj: -2, minTake: 72, minLean: 62, className: "over" };
+  if (timeMin >= 4) return { label: "Late edge", timing: "High caution", riskAdj: 8, minTake: 78, minLean: 68, className: "hold" };
+  return { label: "Late risk", timing: "Paper / very selective", riskAdj: 18, minTake: 86, minLean: 74, className: "hold" };
+}
+
+async function readScreenshot() {
+  if (!selectedImage) {
+    $("ocrStatus").textContent = "Upload a screenshot first.";
+    return;
+  }
+  $("ocrStatus").textContent = "Reading screenshot... first run may take 10–20 seconds.";
+  try {
+    const result = await Tesseract.recognize(selectedImage, "eng", {
+      logger: m => {
+        if (m.status) $("ocrStatus").textContent = m.status + (m.progress ? " " + Math.round(m.progress * 100) + "%" : "");
+      }
+    });
+    const text = result.data.text || "";
+    $("ocrText").style.display = "block";
+    $("ocrText").textContent = text;
+
+    const money = [...text.matchAll(/\$?\s*([0-9]{2,3}[,\s]?[0-9]{3}\.[0-9]{2})/g)].map(m => cleanNum(m[1]));
+    if (money.length >= 1) $("current").value = money[0].toFixed(2);
+    if (money.length >= 2) $("target").value = money[1].toFixed(2);
+
+    const time = text.match(/(\d{1,2})\s*[:;]\s*(\d{2})/);
+    if (time) {
+      $("mins").value = parseInt(time[1], 10);
+      $("secs").value = parseInt(time[2], 10);
+    }
+
+    const normalized = text
+      .replace(/[|]/g, " ")
+      .replace(/[Oo0]ver/g, "Over")
+      .replace(/[Uu]nder/g, "Under")
+      .replace(/\s+/g, " ");
+
+    const overMatch = normalized.match(/Over\D{0,18}(\d{1,3})\s*%/i) || normalized.match(/(\d{1,3})\s*%\D{0,18}Over/i);
+    const underMatch = normalized.match(/Under\D{0,18}(\d{1,3})\s*%/i) || normalized.match(/(\d{1,3})\s*%\D{0,18}Under/i);
+    const overPct = overMatch ? Number(overMatch[1]) : NaN;
+    const underPct = underMatch ? Number(underMatch[1]) : NaN;
+    if (pctIsValid(overPct)) $("overMarket").value = overPct;
+    if (pctIsValid(underPct)) $("underMarket").value = underPct;
+
+    $("ocrStatus").textContent = "Screenshot read complete. Verify fields before using the signal.";
+    calculate();
+  } catch(e) {
+    $("ocrStatus").textContent = "OCR failed. Enter numbers manually.";
+  }
+}
+
+function candleMomentum(candles) {
+  const recent = candles.slice(-8);
+  if (recent.length < 2) return 0;
+  const first = recent[0].close;
+  const last = recent[recent.length - 1].close;
+  const moves = recent.slice(1).map((c, i) => Math.abs(c.close - recent[i].close));
+  const avgMove = moves.reduce((a, b) => a + b, 0) / Math.max(1, moves.length);
+  if (!avgMove) return 0;
+  return clamp((last - first) / (avgMove * 4), -2, 2);
+}
+
+async function fetchLive() {
+  const ts = Date.now();
+  const errors = [];
+  try {
+    const btc = await fetch(`/api/btc?t=${ts}`, { cache: "no-store" }).then(r => r.json());
+    if (btc && btc.ok && Number.isFinite(Number(btc.price))) {
+      livePrice = Number(btc.price);
+      $("livePrice").textContent = "$" + livePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + (btc.source ? "(" + btc.source + ")" : "");
+      if (!$("current").value) $("current").value = livePrice.toFixed(2);
+    } else {
+      errors.push("BTC price unavailable");
+    }
+  } catch(e) { errors.push("BTC fetch failed"); }
+
+  try {
+    const k = await fetch(`/api/kalshi?series=KXBTC15M&t=${ts}`, { cache: "no-store" }).then(r => r.json());
+    if (k && k.ok && k.market) {
+      liveKalshi = k.market;
+      autoFilledMarketTicker = k.market.ticker || null;
+      if (Number.isFinite(Number(k.market.target)) && !$("target").value) $("target").value = Number(k.market.target).toFixed(2);
+      const yesAsk = Number(k.market.yesAsk ?? k.orderbook?.impliedYesAsk);
+      const noAsk = Number(k.market.noAsk ?? k.orderbook?.impliedNoAsk);
+      if (Number.isFinite(yesAsk) && !$("overMarket").value) $("overMarket").value = Math.round(yesAsk);
+      if (Number.isFinite(noAsk) && !$("underMarket").value) $("underMarket").value = Math.round(noAsk);
+      if (k.market.closeTime && (!$("mins").value && !$("secs").value)) {
+        const rem = Math.max(0, new Date(k.market.closeTime).getTime() - Date.now());
+        $("mins").value = Math.floor(rem / 60000);
+        $("secs").value = Math.floor((rem % 60000) / 1000);
+      }
+    } else {
+      errors.push("Kalshi market unavailable");
+    }
+  } catch(e) { errors.push("Kalshi fetch failed"); }
+
+  try {
+    const c = await fetch(`/api/candles?minutes=80&granularity=60&t=${ts}`, { cache: "no-store" }).then(r => r.json());
+    if (c && c.ok && Array.isArray(c.candles) && c.candles.length) {
+      liveCandles = c.candles.filter(x => Number.isFinite(Number(x.close))).map(x => ({
+        time: x.time,
+        open: Number(x.open),
+        high: Number(x.high),
+        low: Number(x.low),
+        close: Number(x.close)
+      }));
+      liveMomentum = candleMomentum(liveCandles);
+      if (liveMomentum > 0.35) $("liveTrend").textContent = "Up / breakout leaning";
+      else if (liveMomentum < -0.35) $("liveTrend").textContent = "Down / rolling over";
+      else $("liveTrend").textContent = "Flat / choppy";
+      drawChart();
+    } else {
+      errors.push("Candles unavailable");
+    }
+  } catch(e) { errors.push("Candles fetch failed"); }
+
+  if (errors.length && !livePrice) $("livePrice").textContent = "Live unavailable";
+  calculate(false);
+}
+
+function drawChart() {
+  const c = $("chart"), ctx = c.getContext("2d");
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.strokeStyle = "#2a3140";
+  ctx.lineWidth = 1;
+  for (let i=1; i<4; i++) {
+    const y = i * c.height / 4;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(c.width, y); ctx.stroke();
+  }
+  if (!liveCandles.length) return;
+  const closes = liveCandles.map(d => d.close);
+  const min = Math.min(...closes), max = Math.max(...closes);
+  const pad = (max - min) * 0.12 || 1;
+  const yFor = v => c.height - ((v - (min - pad)) / ((max + pad) - (min - pad))) * c.height;
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = liveMomentum < 0 ? "#ff2d55" : "#00c853";
+  ctx.beginPath();
+  closes.forEach((v, i) => {
+    const x = closes.length === 1 ? 0 : i * c.width / (closes.length - 1);
+    const y = yFor(v);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+}
+
+function calculate(manual = true) {
+  const current = cleanNum($("current").value);
+  const target = cleanNum($("target").value);
+  const mins = parseFloat($("mins").value || 0);
+  const secs = parseFloat($("secs").value || 0);
+  const trend = parseFloat($("trend").value || 0);
+  const overMarket = parseFloat($("overMarket").value);
+  const underMarket = parseFloat($("underMarket").value);
+  const mode = $("mode") ? $("mode").value : "early";
+
+  if (!isFinite(current) || !isFinite(target) || (mins + secs) <= 0) {
+    $("choice").className = "choice hold";
+    $("choice").textContent = "Enter numbers";
+    $("successPct").textContent = "—";
+    $("betQuality").textContent = "☆☆☆☆☆";
+    return;
+  }
+
+  const timeMin = mins + secs / 60;
+  const windowInfo = decisionWindow(timeMin);
+  const gap = target - current;
+  const needPerMin = gap / timeMin;
+
+  const recent = liveCandles.slice(-10);
+  const closes = recent.map(c => c.close);
+  const highs = recent.map(c => c.high);
+  const lows = recent.map(c => c.low);
+  const liveRange = recent.length ? Math.max(...highs) - Math.min(...lows) : 0;
+  const avgOneMinMove = closes.length > 1
+    ? closes.slice(1).reduce((sum, v, i) => sum + Math.abs(v - closes[i]), 0) / (closes.length - 1)
+    : 0;
+
+  const requiredMoveRatio = avgOneMinMove ? Math.abs(needPerMin) / avgOneMinMove : Math.abs(needPerMin) / 8;
+  const nearTargetRisk = Math.abs(gap) < Math.max(12, avgOneMinMove * 1.4) ? 22 : 0;
+  const lateWindowRisk = timeMin < 2 ? 30 : timeMin < 4 ? 20 : timeMin < 4.5 ? 16 : timeMin < 5 ? 9 : timeMin < 6 ? 2 : timeMin < 8 ? 7 : 12;
+  const whipsawRisk = liveRange > 0 && avgOneMinMove > 0 ? clamp((liveRange / avgOneMinMove) * 7, 0, 30) : 12;
+
+  let overScore = 50;
+
+  // Distance/time pressure.
+  if (gap > 0) overScore -= clamp(Math.abs(needPerMin) * 1.2, 0, 35);
+  else overScore += clamp(Math.abs(needPerMin) * 1.2, 0, 35);
+
+  // Screenshot trend and live momentum.
+  overScore += trend * 5;
+  overScore += liveMomentum * 12;
+
+  // Market-implied pricing.
+  let impliedOver = NaN;
+  if (isFinite(overMarket) && isFinite(underMarket) && overMarket + underMarket > 0) {
+    impliedOver = overMarket / (overMarket + underMarket) * 100;
+    overScore = (overScore * 0.68) + (impliedOver * 0.32);
+  }
+
+  // Final minutes favor the current side unless momentum says otherwise.
+  if (timeMin < 3 && gap > 0) overScore -= 6;
+  if (timeMin < 3 && gap < 0) overScore += 6;
+
+  overScore = clamp(overScore, 3, 97);
+  const underScore = 100 - overScore;
+  const rawPick = underScore > overScore ? "UNDER" : "OVER";
+  const confidence = Math.max(underScore, overScore);
+
+  const totalRisk = clamp((100 - confidence) * 0.55 + lateWindowRisk * 0.6 + nearTargetRisk + whipsawRisk * 0.45 + windowInfo.riskAdj, 0, 100);
+  let riskPenaltyRate = 0.60;
+  let maxRiskPenalty = 26;
+  if (mode === "530") { riskPenaltyRate = 0.48; maxRiskPenalty = 22; }
+  if (mode === "turbo") { riskPenaltyRate = 0.34; maxRiskPenalty = 17; }
+  if (mode === "early") { riskPenaltyRate = 0.42; maxRiskPenalty = 20; }
+  if (mode === "conservative") { riskPenaltyRate = 0.78; maxRiskPenalty = 34; }
+  let successChance = clamp(confidence - clamp(totalRisk * riskPenaltyRate, 0, maxRiskPenalty), 1, 99);
+
+  let action = "SKIP / NO BET";
+  if (mode === "530") {
+    if (timeMin > 8) action = "STAGING ONLY - WAIT FOR 6:00";
+    else if (timeMin > 6) {
+      if (successChance >= windowInfo.minLean && totalRisk < 72) action = "WATCH " + rawPick + " - WAIT FOR 6:00";
+      else action = "STAGING / NO TRADE YET";
+    } else if (timeMin >= 5) {
+      if (successChance >= windowInfo.minTake && totalRisk < 74) action = "TAKE " + rawPick;
+      else if (successChance >= windowInfo.minLean && totalRisk < 82) action = "LEAN " + rawPick;
+      else action = "WAIT / TOO WEAK AT 5:30";
+    } else if (timeMin >= 4.5) {
+      if (successChance >= windowInfo.minTake && totalRisk < 68) action = "TAKE " + rawPick;
+      else if (successChance >= windowInfo.minLean && totalRisk < 78) action = "CONFIRMING LEAN " + rawPick;
+      else action = "WAIT / CONFIRMATION WEAK";
+    } else if (timeMin >= 4) {
+      if (successChance >= windowInfo.minTake && totalRisk < 58) action = "LATE TAKE " + rawPick;
+      else if (successChance >= windowInfo.minLean) action = "LATE LEAN / PAPER " + rawPick;
+      else action = "LATE SKIP";
+    } else {
+      if (successChance >= windowInfo.minTake && totalRisk < 48) action = "VERY LATE TAKE " + rawPick;
+      else if (successChance >= windowInfo.minLean) action = "PAPER ONLY " + rawPick;
+      else action = "LATE SKIP";
+    }
+  } else if (mode === "turbo") {
+    if (successChance >= 66) action = "TAKE " + rawPick;
+    else if (successChance >= 57) action = "LEAN " + rawPick;
+    else if (successChance >= 51) action = "FORCED LEAN " + rawPick;
+  } else if (mode === "early") {
+    if (successChance >= 68 && totalRisk < 75) action = "TAKE " + rawPick;
+    else if (successChance >= 58) action = "LEAN " + rawPick;
+    else if (successChance >= 52) action = "EARLY LEAN " + rawPick;
+  } else if (mode === "conservative") {
+    if (successChance >= 84 && totalRisk < 38) action = "TAKE " + rawPick;
+    else if (successChance >= 76 && totalRisk < 48) action = "LEAN " + rawPick;
+    else if (successChance >= 68 && totalRisk < 58) action = "SMALL LEAN " + rawPick;
+  } else {
+    if (successChance >= 76 && totalRisk < 55) action = "TAKE " + rawPick;
+    else if (successChance >= 66 && totalRisk < 68) action = "LEAN " + rawPick;
+    else if (successChance >= 57) action = "SMALL LEAN " + rawPick;
+  }
+
+  const pick = (action.includes("SKIP") || action.includes("WAIT") || action.includes("STAGING") || action.includes("PAPER")) ? "WAIT" : rawPick;
+  const stars = starRating(successChance, totalRisk);
+
+  $("choice").className = "choice " + (pick === "UNDER" ? "under" : pick === "OVER" ? "over" : "hold");
+  $("choice").textContent = pick === "WAIT" ? "SKIP / WAIT" : pick;
+  $("successPct").textContent = successChance.toFixed(0) + "%";
+  $("successPct").style.color = successChance >= 80 ? "#48e68d" : successChance >= 70 ? "#7cc7ff" : successChance >= 60 ? "#ffd166" : successChance >= 50 ? "#ff9f43" : "#ff6b85";
+  $("betQuality").textContent = "★★★★★".slice(0, stars) + "☆☆☆☆☆".slice(0, 5 - stars);
+  setScale(successChance);
+
+  $("fill").style.width = underScore + "%";
+  $("fill").style.background = rawPick === "UNDER" ? "var(--red)" : "var(--green)";
+  $("windowStatus").textContent = windowInfo.label;
+  $("modelTiming").textContent = windowInfo.timing;
+  $("underProb").textContent = underScore.toFixed(0) + "%";
+  $("overProb").textContent = overScore.toFixed(0) + "%";
+  $("gap").textContent = (gap >= 0 ? "$" : "-$") + Math.abs(gap).toFixed(2);
+  $("need").textContent = "$" + Math.abs(needPerMin).toFixed(2) + " toward " + (gap >= 0 ? "Over" : "Under");
+  $("risk").textContent = totalRisk < 35 ? "Lower risk" : totalRisk < 60 ? "Medium risk" : "High risk";
+  $("action").textContent = action;
+  $("confidence").textContent = confidence.toFixed(0) + "/100";
+  $("lateDanger").textContent = lateWindowRisk >= 20 ? "High" : lateWindowRisk >= 10 ? "Medium" : "Low";
+  $("whipsaw").textContent = whipsawRisk >= 22 ? "High" : whipsawRisk >= 12 ? "Medium" : "Low";
+
+  let edge = NaN;
+  if (isFinite(impliedOver)) {
+    edge = rawPick === "OVER" ? overScore - impliedOver : underScore - (100 - impliedOver);
+    $("valueRead").textContent = edge > 8 ? "Possible value" : edge > 0 ? "Small edge" : "No clear edge";
+  } else {
+    $("valueRead").textContent = "Need market %";
+  }
+
+  let why = "";
+  why += gap > 0 ? "Current price is below the target, so Over needs a rally. " : "Current price is above the target, so Under needs a drop. ";
+  if (livePrice) why += "Live BTC candles are included. ";
+  if (liveMomentum < -0.25) why += "Live momentum is leaning down. ";
+  if (liveMomentum > 0.25) why += "Live momentum is leaning up. ";
+  if (nearTargetRisk) why += "Price is close enough to the target that a small move can flip the result. ";
+  if (Math.abs(needPerMin) > 5) why += "The needed move per minute is meaningful for this short window. ";
+  if (mode === "530") why += "5:30 Decision mode is tuned to make the real call between 6:00 and 5:00 remaining. ";
+  else if (mode === "turbo" || mode === "early") why += "Turbo/Early mode reduces the risk penalty so the app gives a pick sooner. The success percentage is still risk-adjusted, but less conservative.";
+  else why += "The success percentage is the pick probability after a risk penalty.";
+  $("explain").textContent = why;
+
+  $("riskDetails").innerHTML =
+    "<b>Risk breakdown:</b><br>" +
+    "• Decision window: " + windowInfo.label + " / " + windowInfo.timing + "<br>" +
+    "• Recommended pick: " + (pick === "WAIT" ? "None" : rawPick) + "<br>" +
+    "• Chance of success: " + successChance.toFixed(0) + "%<br>" +
+    "• Bet quality: " + stars + "/5<br>" +
+    "• Required move ratio: " + requiredMoveRatio.toFixed(2) + "x recent 1-minute movement<br>" +
+    "• Recent live range: $" + liveRange.toFixed(2) + "<br>" +
+    "• Avg 1-minute movement: $" + avgOneMinMove.toFixed(2) + "<br>" +
+    "• Total risk score: " + totalRisk.toFixed(0) + "/100" +
+    (autoFilledMarketTicker ? "<br>• Live Kalshi market: " + autoFilledMarketTicker : "");
+
+  const reasons = [];
+  if (mode === "530" && timeMin > 6) reasons.push("🕒 5:30 model is still staging. The primary decision window has not opened yet.");
+  if (mode === "530" && timeMin <= 6 && timeMin >= 5) reasons.push("🟢 Primary 5:30 decision window is open.");
+  if (mode === "530" && timeMin < 4.5) reasons.push("⚠️ This is past the main 5:30 window, so the model applies late-risk caution.");
+  if (pick === "WAIT") reasons.push("🔴 No trade: edge is not strong enough after timing and risk adjustment.");
+  else reasons.push("✅ Recommended pick is " + rawPick + " with a " + successChance.toFixed(0) + "% estimated success chance.");
+  if (Math.abs(gap) < Math.max(12, avgOneMinMove * 1.4)) reasons.push("⚠️ Price is close to the target, so one quick move can flip the outcome.");
+  if (lateWindowRisk >= 20) reasons.push("⚠️ Late-window danger is high. Moves can reverse quickly near expiration.");
+  if (whipsawRisk >= 22) reasons.push("⚠️ Recent candle range suggests whipsaw risk.");
+  if (isFinite(edge)) reasons.push((edge > 0 ? "🟢" : "🟡") + " Value check vs market: " + edge.toFixed(1) + " percentage points.");
+  if (liveKalshi) reasons.push("📡 Live Kalshi market data is available; manual/screenshot fields remain editable.");
+  $("whyList").innerHTML = reasons.map(r => "<li>" + r + "</li>").join("");
+
+  if (manual) {
+    localStorage.setItem("lastInputs", JSON.stringify({current,target,mins,secs,trend,overMarket,underMarket,mode}));
+  }
+}
+
+window.addEventListener("load", () => {
+  const saved = localStorage.getItem("lastInputs");
+  if (saved) {
+    try {
+      const s = JSON.parse(saved);
+      for (const k in s) if ($(k)) $(k).value = s[k];
+      calculate(false);
+    } catch(e) {}
+  }
+  fetchLive();
+  setInterval(fetchLive, 5000);
+});
+</script>
 </body>
 </html>

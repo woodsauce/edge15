@@ -1,31 +1,30 @@
-# Edge15 Genesis-027 Rollback Base
+# Edge15 Genesis-028 — 5:30 Decision Classic
 
-This version intentionally returns to the older Genesis 027-style helper flow:
+This version starts from the Genesis-027 classic helper style and tunes the main model around the scored sweet spot: 6:00 to 5:00 remaining, with a target decision around 5:30 left.
 
-- two-card layout
-- screenshot/manual inputs
+## Main behavior
+
+- Above 8:00 remaining: staging only.
+- 8:00–6:00 remaining: build a lean, but wait for the decision window.
+- 6:00–5:00 remaining: primary 5:30 decision window.
+- 5:00–4:30 remaining: confirmation window.
+- Under 4:30 remaining: late-risk / very selective.
+
+## Layout
+
+This keeps the older Genesis-027 helper flow:
+
+- screenshot upload and manual inputs on the left
 - one Analyze button
-- simple OVER / UNDER / SKIP output
-- success percentage and bet-quality stars
-- estimated Under/Over probabilities
-- gap to target
-- move needed per minute
-- live BTC price and momentum
-- risk, late-window danger, whipsaw risk, and value vs market
-- hidden diagnostics only
-
-Live data remains available as support:
-
-- `/api/btc`
-- `/api/kalshi?series=KXBTC15M`
-- `/api/coinbase?light=1`
-- `/api/candles`
-- `/api/health`
+- single prediction card on the right
+- OVER / UNDER / WAIT output
+- success percentage
+- risk, whipsaw, late-window, value-vs-market
+- live BTC and Kalshi support in the background
 
 ## Vercel settings
 
 - Framework Preset: Other
-- Build Command: `npm run vercel-build`
-- Output Directory: `public`
-- Install Command: `npm install`
-- Node.js Version: `24.x`
+- Build Command: npm run vercel-build
+- Output Directory: public
+- Node.js Version: 24.x
