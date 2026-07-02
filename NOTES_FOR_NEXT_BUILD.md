@@ -1,23 +1,11 @@
-# Notes for Next Build
+# Notes for next build
 
-Genesis-025 should be judged separately from the normal Edge15 model.
+Suggested next items after Genesis-028:
 
-Recommended test protocol:
-
-1. Start the app early in the 15-minute market.
-2. Only count predictions made from 10:00 through 9:00 remaining.
-3. Track directional prediction accuracy separately from actual trade result.
-4. After 50+ samples, compare:
-   - 9:30 Predictor
-   - 9:30 Aggressive
-   - 9:30 Conservative
-   - Value Hunter
-   - Paper Test
-5. Use the exported JSON/CSV to tune score, edge, and risk thresholds.
-
-Potential v25.1 upgrades:
-
-- Store the exact 10:00, 9:30, and 9:00 snapshots separately.
-- Add a final settlement auto-check if authenticated Kalshi history is available.
-- Add a confidence calibration chart for 9:30 predictions.
-- Add a mode that only logs predictions and never shows trade language.
+1. Compare official 4:30 snapshots against final settlement to measure the 5:00–4:00 model.
+2. Add a small chart of BTC distance to target from market open to 4:30.
+3. Add a "Did 4:30 beat waiting?" column to export.
+4. Add a stronger CF Benchmarks/BRTI approximation warning because Kalshi settles against CF Benchmarks RTI, not Coinbase spot.
+5. Add optional user-entered final settlement value.
+6. Track whether the best entry was at 5:00, 4:30, 4:00, or later.
+7. Add a compact phone-first view with only Final Call, Time Left, BTC, Target, Max Buy, and Log Result.
