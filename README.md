@@ -1,12 +1,12 @@
-# Edge15 Genesis-025
+# Edge15 Genesis-026
 
-Edge15 Genesis-025 is the **6-Minute Commit + Pre-Commit Preview + Position Exit Engine** build.
+Edge15 Genesis-026 is the **4-Minute Commit + Pre-Commit Preview + Position Exit Engine** build.
 
-This version moves the live commitment checkpoint back to **6:00 remaining**, based on the latest Commit Timing Lab results showing 6 minutes as the strongest live timing zone. It keeps the 8:00, 4:00, 3:00, strategy-profile, and adaptive-commit testing labs running in the background.
+This version moves the live commitment checkpoint back to **4:00 remaining**, based on the latest Commit Timing Lab results showing 4 minutes as the strongest live timing zone. It keeps the 8:00, 6:00, 3:00, strategy-profile, and adaptive-commit testing labs running in the background while making 4:00 the live test point.
 
 ## What changed
 
-- Live commitment returns to about **6:00 remaining**.
+- Live commitment moves to about **4:00 remaining**.
 - Added **Pre-Commit Preview** so you can see what Edge15 is leaning toward before the official lock.
 - Added **Position Exit Engine** after you press Entered OVER or Entered UNDER.
 - Added **Hold Quality** and exit statuses: HOLD, WATCH CLOSELY, DANGER, CASH OUT SIGNAL.
@@ -31,5 +31,5 @@ Upload the **contents** of this folder into the GitHub repo root and commit.
 Recommended commit message:
 
 ```text
-Genesis-025: add 6-minute preview and exit engine
+Genesis-026: test 4-minute commitment timing
 ```

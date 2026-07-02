@@ -8,7 +8,7 @@ export async function GET() {
   return NextResponse.json({
     ...report,
     app: 'Edge15',
-    release: 'Genesis-025',
+    release: 'Genesis-026',
     timestamp: new Date().toISOString(),
   }, { status: report.ok ? 200 : 503 });
 }
