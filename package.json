@@ -1,12 +1,12 @@
 {
-  "name": "edge15-genesis-028-430-decision",
-  "version": "28.0.0",
+  "name": "edge15-genesis-027-rollback-base",
+  "version": "27.1.0",
   "private": true,
-  "description": "Edge15 Genesis-028 Classic Helper with 5:00-4:00 remaining decision window for BTC 15-minute Kalshi markets.",
+  "description": "Edge15 Genesis-027 rollback base: classic two-card BTC predictive market helper with live data support.",
   "type": "module",
   "scripts": {
     "start": "vercel dev",
-    "check": "node --check api/kalshi.js && node --check api/btc.js && node --check api/coinbase.js && node --check api/candles.js && node --check api/binance.js && node --check api/deribit.js && node --check api/health.js && node --check api/all.js",
+    "check": "node --check api/kalshi.js && node --check api/btc.js && node --check api/coinbase.js && node --check api/candles.js && node --check api/binance.js && node --check api/deribit.js && node --check api/health.js && node --check api/all.js && node --check scripts/vercel-build.js",
     "vercel-build": "node scripts/vercel-build.js",
     "build": "node scripts/vercel-build.js"
   },

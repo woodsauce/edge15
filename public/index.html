@@ -3,139 +3,132 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Edge15 Genesis-028 Classic 4:30 Decision</title>
+  <title>Edge15 Genesis-027 Rollback Base</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div>
-      <div class="eyebrow">Edge15 Genesis-028</div>
-      <h1>Classic 4:30 Decision Helper</h1>
-      <p>Clean older-style layout. Main call is built for the 5:00–4:00 remaining window.</p>
-    </div>
-    <div class="actions">
-      <button id="refreshBtn">Refresh</button>
-      <button id="pauseBtn" class="secondary">Pause</button>
-      <button id="testApiBtn" class="secondary">Test API</button>
-    </div>
-  </header>
+  <div class="wrap">
+    <header>
+      <div class="eyebrow">Edge15 Genesis-027 Rollback Base</div>
+      <h1>15-Min Bitcoin Predictive Market Helper</h1>
+      <p class="sub">Back to the older helper flow: screenshot/manual inputs, one Analyze button, and a simple OVER / UNDER / SKIP result. Live BTC and Kalshi data are support inputs, not the main layout.</p>
+    </header>
 
-  <main>
-    <section class="card hero" id="heroCard">
-      <div class="heroMain">
-        <div class="pillrow">
-          <span id="windowPill" class="pill neutral">Loading</span>
-          <span id="modePill" class="pill muted">4:30 Decision</span>
-          <span id="dataPill" class="pill muted">Checking live data</span>
+    <main class="grid">
+      <section class="card">
+        <h2>Screenshot + Inputs</h2>
+
+        <label>Upload screenshot</label>
+        <input id="shot" type="file" accept="image/*" />
+        <button class="secondary" id="readShotBtn">Read screenshot & fill fields</button>
+        <div id="ocrStatus" class="small"></div>
+        <pre id="ocrText"></pre>
+        <img id="preview" alt="Screenshot preview" />
+
+        <div class="row twoActions">
+          <button class="secondary" id="liveFillBtn">Use live BTC/Kalshi</button>
+          <button class="secondary" id="refreshLiveBtn">Refresh live data</button>
         </div>
-        <div class="eyebrow">Final Call</div>
-        <h2 id="finalAction">Loading market...</h2>
-        <p id="finalWhy">Waiting for BTC, Kalshi, orderbook, trades, and timing.</p>
-        <div class="bigReadGrid">
-          <div><span>Lean</span><strong id="leanRead">--</strong></div>
-          <div><span>Confidence</span><strong id="confidenceRead">--</strong></div>
-          <div><span>Risk</span><strong id="riskRead">--</strong></div>
+
+        <label>Current BTC price</label>
+        <input id="current" type="number" step="0.01" placeholder="60743.44" />
+
+        <label>Price to beat</label>
+        <input id="target" type="number" step="0.01" placeholder="60767.06" />
+
+        <label>Time remaining</label>
+        <div class="row">
+          <input id="mins" type="number" min="0" step="1" placeholder="8 min" />
+          <input id="secs" type="number" min="0" max="59" step="1" placeholder="47 sec" />
         </div>
-      </div>
-      <aside class="heroSide">
-        <label class="selectLabel">Mode</label>
-        <select id="modeSelect">
-          <option value="430 Decision">4:30 Decision</option>
-          <option value="Balanced">Balanced</option>
-          <option value="Aggressive">Aggressive</option>
-          <option value="Conservative">Conservative</option>
-          <option value="Paper Only">Paper Only</option>
+
+        <label>Market Over % or YES price ¢</label>
+        <input id="overMarket" type="number" min="0" max="100" step="0.1" placeholder="55" />
+
+        <label>Market Under % or NO price ¢</label>
+        <input id="underMarket" type="number" min="0" max="100" step="0.1" placeholder="46" />
+        <div class="small">Use Kalshi YES/NO ask prices or the screenshot's Over/Under percentages. The model compares its probability to market price.</div>
+
+        <label>Last visible screenshot movement</label>
+        <select id="trend">
+          <option value="-2">Strong down / rolling over</option>
+          <option value="-1">Slight down</option>
+          <option value="0" selected>Flat / choppy</option>
+          <option value="1">Slight up</option>
+          <option value="2">Strong up / breakout</option>
         </select>
-        <div class="pricebox primary">
-          <span>Max Buy</span>
-          <strong id="maxBuyRead">--</strong>
-          <small id="valueRead">Edge --</small>
-        </div>
-        <div class="pricebox">
-          <span>Current Ask</span>
-          <strong id="currentAskRead">--</strong>
-          <small id="fairPriceRead">Fair --</small>
-        </div>
-      </aside>
-    </section>
 
-    <section class="grid four quickStats">
-      <article class="card stat"><span>BTC Price</span><strong id="btcPrice">--</strong><small id="btcMeta">--</small></article>
-      <article class="card stat"><span>Kalshi Target</span><strong id="targetPrice">--</strong><small id="marketTicker">--</small></article>
-      <article class="card stat"><span>Time Left</span><strong id="timeRemaining">--</strong><small id="windowLabel">--</small></article>
-      <article class="card stat"><span>Distance</span><strong id="distanceRead">--</strong><small id="distanceMeta">--</small></article>
-    </section>
+        <label>Prediction speed</label>
+        <select id="mode">
+          <option value="early">Early mode - faster pick, more risk</option>
+          <option value="balanced" selected>Balanced mode</option>
+          <option value="conservative">Conservative mode - waits longer</option>
+        </select>
 
-    <section class="grid two">
-      <article class="card">
-        <div class="sectionTitle"><h3>What it sees</h3><span class="pill muted" id="signalPill">signals</span></div>
-        <div id="simpleReasons" class="list"></div>
-      </article>
-      <article class="card">
-        <div class="sectionTitle"><h3>Trade check</h3><span class="pill muted" id="tradePill">value</span></div>
-        <div id="tradeChecklist" class="list"></div>
-      </article>
-    </section>
+        <button id="analyzeBtn">Analyze</button>
+      </section>
 
-    <section class="card decisionWindowCard">
-      <div class="sectionTitle"><h3>4:30 Decision Window</h3><span class="pill" id="windowStatus">--</span></div>
-      <div id="windowDetails" class="windowDetails"></div>
-    </section>
+      <section class="card">
+        <h2>Prediction</h2>
+        <div id="choice" class="choice hold">Enter numbers</div>
 
-    <section class="card manualCard">
-      <details>
-        <summary>Manual fallback / overrides</summary>
-        <p class="mutedText">Leave blank to use live data. Use this if a live field is blank or obviously wrong.</p>
-        <div class="formgrid">
-          <label>BTC price <input id="manualPrice" type="number" placeholder="optional" step="0.01"></label>
-          <label>Target price <input id="manualTarget" type="number" placeholder="optional" step="0.01"></label>
-          <label>YES ask ¢ <input id="manualYesAsk" type="number" placeholder="optional" step="0.1" min="0.1" max="99.9"></label>
-          <label>NO ask ¢ <input id="manualNoAsk" type="number" placeholder="optional" step="0.1" min="0.1" max="99.9"></label>
-          <label>Minutes left <input id="manualMinutes" type="number" placeholder="optional" step="0.1" min="0" max="15"></label>
-        </div>
-      </details>
-    </section>
-
-    <section class="grid two">
-      <article class="card">
-        <div class="sectionTitle">
-          <h3>Result tracker</h3>
-          <div class="smallActions">
-            <button id="logWinBtn" class="success">Win</button>
-            <button id="logLossBtn" class="danger">Loss</button>
-            <button id="logNoTradeBtn" class="secondary">No Trade</button>
+        <div class="successBox">
+          <div class="small">Chance of success by recommended pick</div>
+          <div id="successPct" class="successPct">—</div>
+          <div id="betQuality" class="stars">☆☆☆☆☆</div>
+          <div class="scale">
+            <div id="scale1">No trade<br>&lt;50%</div>
+            <div id="scale2">Weak<br>50–59%</div>
+            <div id="scale3">Small edge<br>60–69%</div>
+            <div id="scale4">Good<br>70–79%</div>
+            <div id="scale5">Strong<br>80%+</div>
           </div>
         </div>
-        <div id="trackerSummary" class="trackerSummary"></div>
-        <div class="smallActions wrap">
-          <button id="exportCsvBtn" class="secondary">Export CSV</button>
-          <button id="exportJsonBtn" class="secondary">Export JSON</button>
-          <button id="clearLogsBtn" class="secondary">Clear</button>
-        </div>
-      </article>
-      <article class="card">
-        <div class="sectionTitle"><h3>Mode reads</h3><span class="pill muted">comparison</span></div>
-        <div id="modeTable" class="list compact"></div>
-      </article>
-    </section>
 
-    <section class="card advancedCard">
+        <div class="bar"><div id="fill" class="fill"></div></div>
+
+        <div class="metric"><span>Estimated Under probability</span><b id="underProb">—</b></div>
+        <div class="metric"><span>Estimated Over probability</span><b id="overProb">—</b></div>
+        <div class="metric"><span>Gap to target</span><b id="gap">—</b></div>
+        <div class="metric"><span>Move needed per minute</span><b id="need">—</b></div>
+        <div class="metric"><span>Live BTC price</span><b id="livePrice">Loading...</b></div>
+        <div class="metric"><span>Live chart momentum</span><b id="liveTrend">Loading...</b></div>
+        <div class="metric"><span>Risk read</span><b id="risk">—</b></div>
+        <div class="metric"><span>Recommended action</span><b id="action">—</b></div>
+        <div class="metric"><span>Confidence score</span><b id="confidence">—</b></div>
+        <div class="metric"><span>Late-window danger</span><b id="lateDanger">—</b></div>
+        <div class="metric"><span>Whipsaw risk</span><b id="whipsaw">—</b></div>
+        <div class="metric"><span>Value vs market</span><b id="valueRead">—</b></div>
+
+        <canvas id="chart" width="900" height="320"></canvas>
+
+        <p id="explain" class="note">This is a decision helper, not a guaranteed signal. Bitcoin can move suddenly near expiration.</p>
+        <div id="riskDetails" class="note"></div>
+        <div class="note"><b>Why this recommendation?</b><ul id="whyList" class="reasonList"></ul></div>
+        <span class="pill">Best use: update again with 2–3 minutes left</span>
+      </section>
+    </main>
+
+    <section class="card lower">
       <details>
-        <summary>Advanced signals and diagnostics</summary>
-        <div class="grid three">
-          <div><h4>Signals</h4><div id="advancedSignals" class="list compact"></div></div>
-          <div><h4>Sources</h4><div id="dataSources" class="list compact"></div></div>
+        <summary>Live data + diagnostics</summary>
+        <div class="diagGrid">
           <div>
-            <h4>Diagnostics</h4>
-            <div class="smallActions wrap"><button id="copyDiagBtn" class="secondary">Copy diagnostics</button></div>
+            <h3>Live source status</h3>
+            <div id="sourceStatus" class="compactList"></div>
+          </div>
+          <div>
+            <h3>Diagnostics</h3>
+            <button class="secondary compactBtn" id="copyDiagBtn">Copy diagnostics</button>
             <pre id="diagnostics"></pre>
           </div>
         </div>
       </details>
     </section>
-  </main>
 
-  <footer><span id="lastUpdated">Not updated yet</span></footer>
+    <footer id="lastUpdated">Not updated yet</footer>
+  </div>
 
   <script src="./app.js"></script>
 </body>

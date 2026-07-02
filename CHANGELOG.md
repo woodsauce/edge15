@@ -1,15 +1,11 @@
 # Changelog
 
-## Genesis-028 v28.0.0
+## 27.1.0 - Genesis-027 Rollback Base
 
-- Returned to the classic Edge helper layout.
-- Replaced heavy cockpit UI with a single big final-call panel.
-- Added default 4:30 Decision mode.
-- Main official decision window is now 5:00–4:00 remaining.
-- Before 5:00, the app shows staging/lean reads.
-- After 4:00, the app shows late/paper-only reads unless another mode is selected.
-- Kept live Kalshi/BTC direct endpoint fetches from the working v24.0.5 path.
-- Added manual minutes override for testing the 5:00–4:00 behavior.
-- Added one automatic 4:30 snapshot per market.
-- Added combined export of result logs and 4:30 snapshots.
-- Kept Advanced diagnostics hidden by default.
+- Rolled interface back to the older predictive-market-helper style.
+- Removed cockpit-style decision panels.
+- Removed forced 9:30 and 4:30 model behavior as the default flow.
+- Restored screenshot/manual input workflow.
+- Restored single Analyze button and simple prediction card.
+- Kept live BTC/Kalshi API support as optional auto-fill and context.
+- Kept Vercel static deployment fixes that worked in previous Genesis builds.

@@ -15,13 +15,11 @@ const requiredFiles = [
   'api/_utils.js'
 ];
 
-for (const file of requiredFiles) {
-  await access(file);
-}
+for (const file of requiredFiles) await access(file);
 
 await mkdir('public', { recursive: true });
 await copyFile('index.html', 'public/index.html');
 await copyFile('app.js', 'public/app.js');
 await copyFile('styles.css', 'public/styles.css');
 
-console.log('Edge15 static build check passed. Static output prepared in /public.');
+console.log('Edge15 Genesis-027 rollback static build passed.');
