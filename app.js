@@ -316,12 +316,13 @@ function render() {
   $('riskBoard').innerHTML = d.riskRows.map(([a,b]) => row(a,b, String(b).includes('Warning') || String(b).includes('dangerous') ? 'warntext' : '')).join('');
 
   const sources = [];
-  sources.push(['Kalshi', data.kalshi?.ok ? 'OK' : 'Issue']);
-  sources.push(['BTC spot fallback', data.btc?.ok ? `OK - ${data.btc.source || 'source'}` : 'Issue']);
+  sources.push(['Kalshi', data.kalshi?.market?.ticker ? 'OK - live market found' : 'Issue']);
+  sources.push(['BTC spot fallback', data.btc?.price ? `OK - ${data.btc.source || 'source'}` : 'Issue']);
   sources.push(['Coinbase spot/candles/book', data.coinbase?.ok ? 'OK' : 'Issue']);
   sources.push(['Binance futures regime', data.binance?.ok ? 'OK' : 'Issue']);
   sources.push(['Deribit volatility', data.deribit?.ok ? 'OK' : 'Issue']);
   sources.push(['Kalshi YES/NO ask', `YES ${fmtC(x.yesAsk)} / NO ${fmtC(x.noAsk)}`]);
+  sources.push(['Fetch mode', data.fetchMode || 'api-all']);
   sources.push(['Kalshi book depth', x.orderbook ? `YES ${Math.round(x.orderbook.yesDepth || 0)} / NO ${Math.round(x.orderbook.noDepth || 0)}` : 'Unavailable']);
   $('dataSources').innerHTML = sources.map(([a,b]) => row(a,b, b === 'OK' ? 'goodtext' : b === 'Issue' ? 'warntext' : '')).join('');
 
@@ -357,37 +358,72 @@ function updateDiagnostics(extra = null) {
 }
 
 async function getJson(path) {
-  const res = await fetch(path, { cache: 'no-store' });
+  const sep = path.includes('?') ? '&' : '?';
+  const url = `${path}${sep}_=${Date.now()}`;
+  const res = await fetch(url, { cache: 'no-store' });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`${path} HTTP ${res.status}: ${JSON.stringify(json).slice(0, 400)}`);
   return json;
 }
 
+function settledValue(entry, fallback) {
+  return entry.status === 'fulfilled' ? entry.value : fallback;
+}
+
+async function directDataFetch() {
+  const [kalshi, btc, coinbase, binance, deribit] = await Promise.allSettled([
+    getJson('/api/kalshi?series=KXBTC15M'),
+    getJson('/api/btc'),
+    getJson('/api/coinbase?light=1'),
+    getJson('/api/binance'),
+    getJson('/api/deribit')
+  ]);
+  return {
+    ok: true,
+    fetchedAt: new Date().toISOString(),
+    fetchMode: 'direct-browser-api-calls',
+    kalshi: settledValue(kalshi, { ok: false, error: String(kalshi.reason) }),
+    btc: settledValue(btc, { ok: false, error: String(btc.reason) }),
+    coinbase: settledValue(coinbase, { ok: false, error: String(coinbase.reason) }),
+    binance: settledValue(binance, { ok: false, error: String(binance.reason) }),
+    deribit: settledValue(deribit, { ok: false, error: String(deribit.reason) }),
+    endpointErrors: [
+      kalshi.status === 'rejected' ? { source: 'kalshi', error: String(kalshi.reason) } : null,
+      btc.status === 'rejected' ? { source: 'btc', error: String(btc.reason) } : null,
+      coinbase.status === 'rejected' ? { source: 'coinbase', error: String(coinbase.reason) } : null,
+      binance.status === 'rejected' ? { source: 'binance', error: String(binance.reason) } : null,
+      deribit.status === 'rejected' ? { source: 'deribit', error: String(deribit.reason) } : null
+    ].filter(Boolean)
+  };
+}
+
+function hasUsableLiveData(data) {
+  return Boolean(data?.btc?.price && data?.kalshi?.market?.ticker);
+}
+
 async function refresh() {
   if (state.paused) return;
   try {
-    let data;
+    // Browser-direct endpoint calls are now the primary path. This avoids a Vercel self-fetch issue
+    // where /api/all can return a successful wrapper but stale/missing nested payloads.
+    let data = await directDataFetch();
+
+    // Keep /api/all as a diagnostic cross-check only; never allow it to blank out good direct data.
     try {
-      data = await getJson('/api/all');
-    } catch (allErr) {
-      const [kalshi, btc, coinbase, binance, deribit] = await Promise.allSettled([
-        getJson('/api/kalshi?series=KXBTC15M'),
-        getJson('/api/btc'),
-        getJson('/api/coinbase?light=1'),
-        getJson('/api/binance'),
-        getJson('/api/deribit')
-      ]);
-      data = {
-        ok: true,
-        fetchedAt: new Date().toISOString(),
-        kalshi: kalshi.status === 'fulfilled' ? kalshi.value : { ok: false, error: String(kalshi.reason) },
-        btc: btc.status === 'fulfilled' ? btc.value : { ok: false, error: String(btc.reason) },
-        coinbase: coinbase.status === 'fulfilled' ? coinbase.value : { ok: false, error: String(coinbase.reason) },
-        binance: binance.status === 'fulfilled' ? binance.value : { ok: false, error: String(binance.reason) },
-        deribit: deribit.status === 'fulfilled' ? deribit.value : { ok: false, error: String(deribit.reason) },
-        allEndpointError: String(allErr)
+      const allData = await getJson('/api/all');
+      data.allEndpoint = {
+        ok: allData.ok !== false,
+        hasBtc: Boolean(allData?.btc?.price),
+        hasKalshi: Boolean(allData?.kalshi?.market?.ticker),
+        errors: allData.errors || []
       };
+      if (!hasUsableLiveData(data) && hasUsableLiveData(allData)) {
+        data = { ...allData, fetchMode: 'api-all-fallback', allEndpoint: data.allEndpoint };
+      }
+    } catch (allErr) {
+      data.allEndpoint = { ok: false, error: String(allErr) };
     }
+
     if (!state.cachedCandles.length || Date.now() - state.lastCandlesFetch > 60_000) {
       try {
         const candles = await getJson('/api/candles?minutes=120');

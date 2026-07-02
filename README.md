@@ -73,3 +73,11 @@ This app does not place trades. It is a decision assistant and logger. Short-ter
 ## Vercel deploy note
 
 This patch removes the invalid `functions.runtime: nodejs20.x` entry from `vercel.json`. Vercel auto-detects JavaScript files in `/api` as Node.js Functions, and Node is pinned in `package.json` with `engines.node = 20.x`.
+
+
+## v24.0.5 Frontend Live Display Fix
+
+- Browser now calls `/api/kalshi`, `/api/btc`, `/api/coinbase`, `/api/binance`, and `/api/deribit` directly as the primary data path.
+- `/api/all` is retained as a diagnostic cross-check only.
+- Added cache-busting query strings to live fetches.
+- Added fetch-mode visibility in Market Data.

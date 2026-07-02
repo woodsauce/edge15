@@ -1,3 +1,10 @@
+# v24.0.5
+
+- Fixed front-end live-data display issue where working `/api/kalshi` and `/api/btc` endpoints could still leave the dashboard blank if `/api/all` had nested/self-fetch problems.
+- Direct browser endpoint calls are now primary.
+- Added cache-busting to every refresh.
+- Added fetch-mode row in Market Data.
+
 # Edge15 Genesis-024 v24.0.4
 
 - Added `/api/btc` multi-source BTC fallback: Coinbase, Kraken, Gemini, Bitstamp.
