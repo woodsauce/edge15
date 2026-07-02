@@ -1,36 +1,16 @@
 {
-  "name": "edge15",
-  "version": "0.27.0-genesis",
+  "name": "edge15-genesis-024-early-signal-stack",
+  "version": "24.0.0",
   "private": true,
+  "description": "Edge15 Genesis-024 Early Signal Stack for BTC 15-minute Kalshi markets.",
+  "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "start": "vercel dev",
+    "check": "node --check api/kalshi.js && node --check api/coinbase.js && node --check api/candles.js && node --check api/binance.js && node --check api/deribit.js && node --check api/health.js && node --check api/all.js"
   },
-  "dependencies": {
-    "@vercel/analytics": "latest",
-    "clsx": "latest",
-    "lucide-react": "latest",
-    "next": "15.5.19",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "recharts": "latest",
-    "tailwind-merge": "latest"
+  "engines": {
+    "node": ">=18"
   },
-  "devDependencies": {
-    "@types/node": "^22.10.2",
-    "@types/react": "^19.0.2",
-    "@types/react-dom": "^19.0.2",
-    "autoprefixer": "^10.4.20",
-    "eslint": "^9.17.0",
-    "eslint-config-next": "^15.3.0",
-    "postcss": "^8.4.49",
-    "tailwindcss": "^3.4.17",
-    "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
-  }
+  "dependencies": {},
+  "devDependencies": {}
 }

@@ -1,55 +1,70 @@
-# Edge15 Genesis-027
+# Edge15 Genesis-024 — Early Signal Stack
 
-Edge15 Genesis-027 is the **Clean Cockpit + Stable Preview** build.
+This is a Vercel-ready Edge15 build focused on getting into BTC 15-minute Kalshi trades sooner **only when the edge is real**.
 
-This version keeps the Genesis-026 4-minute live commitment test and the existing tracking/lab engines, but reorganizes the app so the main screen is cleaner and less overwhelming.
+## What this version adds
 
-## What changed
+- Early Entry Engine
+- Fair Price / Max Buy Price
+- Kalshi orderbook pressure
+- Kalshi odds movement tracking
+- Coinbase BTC price, 1-minute candles, and Level 2 orderbook imbalance. The app uses a light spot/orderbook refresh and refreshes candles separately instead of hammering candle history every 5 seconds.
+- Binance Futures regime data: open interest, funding, mark price, 24h change
+- Deribit BTC volatility regime data
+- Signal Agreement Score across multiple profiles
+- Stronger No-Trade Guard
+- Result tracker with Win/Loss/No-Trade logging
+- CSV/JSON export
+- Diagnostics, Test API, Copy diagnostics
+- Kept the safe Vercel API structure: `/api/kalshi`, `/api/candles`, `/api/coinbase`, `/api/binance`, `/api/deribit`, `/api/health`, `/api/all`
 
-- Main screen is now focused on a smaller **Clean Cockpit**.
-- Tracker Status is hidden by default.
-- Commitment Accuracy is hidden by default.
-- Backup + Compare is hidden by default.
-- Entry Value Engine panel is hidden by default.
-- Commit Timing Lab is hidden by default.
-- Adaptive Commit Lab is hidden by default.
-- Strategy Profile Lab is hidden by default.
-- Version Lab is no longer shown in the cockpit.
-- Decision details / Entry Gate Checklist are hidden by default.
-- Entered OVER / Entered UNDER buttons are hidden by default under **Position Controls**.
-- Pre-Commit Preview was changed into a more stable **Stable Lock Candidate** read.
+## Decision labels
 
-## Stable Lock Candidate
+- `TAKE YES` / `TAKE NO`: signal, timing, risk, and value line up.
+- `WAIT FOR PRICE`: direction looks right, but the contract is too expensive.
+- `WATCH DEVELOPING`: early signal is forming, but not clean enough yet.
+- `SKIP`: no clean edge.
+- `DATA NEEDED`: missing BTC price or Kalshi target.
 
-The old preview could change too often because it followed the raw live read. Genesis-027 only shows a playable projected side when several conditions line up:
+## Vercel deployment
 
-- mature signal plan
-- 2+ confirmations
-- stable direction
-- Trade Quality at least DECENT
-- Entry Value not BAD
-- flip risk not HIGH
-- settlement risk not HIGH / EXTREME
+1. Unzip this folder.
+2. Upload the folder contents to your `woodsauce/edge15` GitHub repo, or create a new repo.
+3. In Vercel, import the repo.
+4. Deploy with default settings.
+5. Open the deployed URL.
+6. Click **Test API**.
 
-If those conditions are not met, the preview shows **NO TRADE** instead of bouncing between sides.
+No build step is required. This is a static frontend with Vercel serverless API routes.
 
-## What did not change
+## Optional Kalshi environment variables
 
-- Live commit remains around **4:00 remaining**.
-- Entry Value Engine still runs in the background.
-- Commit Timing Lab still tracks in the background.
-- Strategy Profile Lab still tracks in the background.
-- Adaptive Commit Lab still tracks in the background.
-- Performance Tracker still stores all-time W/L.
-- Position Exit Engine still works after a position is locked.
-- Backup/export/restore compatibility is preserved.
-
-## Deploy
-
-Upload the **contents** of this folder into the GitHub repo root and commit.
-
-Recommended commit message:
+Public Kalshi market data may work without credentials. If orderbook or market endpoints return `401`, add these Vercel environment variables:
 
 ```text
-Genesis-027: clean cockpit and stabilize preview
+KALSHI_KEY_ID=your-api-key-id
+KALSHI_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----
 ```
+
+Optional base URL override:
+
+```text
+KALSHI_API_BASE_URL=https://external-api.kalshi.com/trade-api/v2
+```
+
+## How to use live
+
+1. Open the app before the 15-minute market starts.
+2. Wait for the app to find the current `KXBTC15M` market.
+3. Watch the **Early Entry Engine** panel.
+4. Only consider action when it shows `TAKE YES` or `TAKE NO`.
+5. Use the displayed **Max Buy** price. If the contract is more expensive than Max Buy, wait or skip.
+6. Log the result after the market closes.
+
+## Manual fallback
+
+If Kalshi does not expose the target cleanly, enter the target manually in **Manual fallback / overrides**. You can also manually enter YES/NO ask prices if the orderbook is unavailable.
+
+## Important
+
+This app does not place trades. It is a decision assistant and logger. Short-term prediction markets are risky, and the app can be wrong.
